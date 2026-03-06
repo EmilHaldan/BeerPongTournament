@@ -12,7 +12,12 @@ document.querySelectorAll(".tab").forEach((btn) => {
     if (btn.dataset.tab === "scoreboard") loadLeaderboard();
     if (btn.dataset.tab === "matches") loadMatches();
     if (btn.dataset.tab === "teams") loadTeams();
-    if (btn.dataset.tab === "register") populateTeamDropdowns();
+    if (btn.dataset.tab === "nextheap") loadHeapInfo();
+    if (btn.dataset.tab === "admin") loadAdminHeapInfo();
+    if (btn.dataset.tab === "register") {
+      populateTeamDropdowns();
+      loadCurrentHeap();
+    }
   });
 });
 
@@ -46,18 +51,20 @@ async function loadLeaderboard() {
 function renderLeaderboard(entries) {
   const tbody = document.getElementById("leaderboard-body");
   if (entries.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">No matches yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No matches yet</td></tr>';
     return;
   }
+  const medals = ["\u{1F947}", "\u{1F948}", "\u{1F949}"]; // gold, silver, bronze
   tbody.innerHTML = entries
     .map(
       (e, i) => `
     <tr>
-      <td>${i + 1}</td>
+      <td>${i < 3 ? medals[i] : i + 1}</td>
       <td>${escapeHtml(e.team_name)}</td>
       <td>${e.total_wins}</td>
       <td>${e.total_loss}</td>
       <td>${e.total_score}</td>
+      <td>${e.total_matches}</td>
     </tr>`
     )
     .join("");
@@ -79,6 +86,7 @@ document.getElementById("match-form").addEventListener("submit", async (e) => {
     team2_name: form.team2_name.value.trim(),
     team1_score: parseInt(form.team1_score.value, 10),
     team2_score: parseInt(form.team2_score.value, 10),
+    heap: parseInt(form.heap.value, 10) || 1,
   };
 
   if (!body.team1_name || !body.team2_name) {
@@ -130,7 +138,7 @@ async function loadMatches() {
 function renderMatches(matches) {
   const tbody = document.getElementById("matches-body");
   if (matches.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No matches yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No matches yet</td></tr>';
     return;
   }
   tbody.innerHTML = matches
@@ -141,6 +149,7 @@ function renderMatches(matches) {
       <td class="score-cell">${m.team1_score}</td>
       <td class="score-cell">${m.team2_score}</td>
       <td>${escapeHtml(m.team2_name)}</td>
+      <td class="score-cell">${m.heap}</td>
       <td class="date-cell">${formatDate(m.created_at)}</td>
       <td><button class="btn-delete" onclick="deleteMatch('${m.id}')">✕</button></td>
     </tr>`
@@ -236,6 +245,192 @@ async function populateTeamDropdowns() {
 
 document.getElementById("refresh-teams-btn").addEventListener("click", loadTeams);
 
+// ── Heap ─────────────────────────────────────────────────────────────
+
+async function loadHeapInfo() {
+  try {
+    const resp = await fetch(API_BASE_URL + "/heap");
+    if (!resp.ok) throw new Error("Failed to load heap info");
+    const data = await resp.json();
+    renderHeapInfo(data);
+  } catch (err) {
+    showError("Could not load heap info: " + err.message);
+  }
+}
+
+function renderHeapInfo(heapInfo) {
+  document.getElementById("heap-number").textContent = heapInfo.current_heap;
+  const container = document.getElementById("heap-matchups");
+
+  if (!heapInfo.matchups || heapInfo.matchups.length === 0) {
+    container.innerHTML = '<p class="empty-msg">No matchups available – register more teams</p>';
+    return;
+  }
+
+  container.innerHTML = heapInfo.matchups
+    .map(
+      (m, idx) => {
+        // Underdog (team2, lower pts) goes on the left as Red (starts first)
+        // Favorite (team1, higher pts) goes on the right as Blue
+        const redName = m.team2_name;
+        const redPts = m.team2_points;
+        const blueName = m.team1_name;
+        const bluePts = m.team1_points;
+        const redScore = m.team2_score;
+        const blueScore = m.team1_score;
+
+        const redWinner = m.winner === redName;
+        const blueWinner = m.winner === blueName;
+        const redMedal = redWinner ? '<span class="winner-medal">\u{1F947}</span>' : '';
+        const blueMedal = blueWinner ? '<span class="winner-medal">\u{1F947}</span>' : '';
+        const recordedClass = m.recorded ? 'matchup-recorded' : 'matchup-pending';
+        const scoreText = m.recorded
+          ? `<span class="matchup-score">${redScore} \u2013 ${blueScore}</span>`
+          : '<span class="matchup-score pending">Not recorded</span>';
+        const tableNumber = idx + 1;
+
+        return `
+    <div class="matchup-card ${recordedClass}">
+      <div class="matchup-team">
+        ${redMedal}<span class="matchup-color red">\u{1F534}</span><span class="matchup-name">${escapeHtml(redName)}</span>
+        <span class="matchup-pts">${redPts} pts</span>
+      </div>
+      <div class="matchup-center">
+        <div class="matchup-table">Table ${tableNumber}</div>
+        <div class="matchup-vs">VS</div>
+        ${scoreText}
+      </div>
+      <div class="matchup-team">
+        <span class="matchup-name">${escapeHtml(blueName)}</span><span class="matchup-color blue">\u{1F535}</span>${blueMedal}
+        <span class="matchup-pts">${bluePts} pts</span>
+      </div>
+    </div>`;
+      }
+    )
+    .join("");
+
+  // Summary line
+  const total = heapInfo.teams_recorded.length + heapInfo.teams_not_recorded.length;
+  const recorded = heapInfo.teams_recorded.length;
+  container.innerHTML += `
+    <div class="heap-summary">
+      <span>${recorded} / ${total} teams recorded</span>
+    </div>`;
+}
+
+async function loadCurrentHeap() {
+  try {
+    const resp = await fetch(API_BASE_URL + "/heap");
+    if (!resp.ok) throw new Error("Failed to load heap");
+    const data = await resp.json();
+    document.getElementById("heap").value = data.current_heap;
+  } catch (err) {
+    // Silently fall back to 1
+    document.getElementById("heap").value = 1;
+  }
+}
+
+document.getElementById("start-next-heap-btn").addEventListener("click", async () => {
+  if (!confirm("Are you sure all teams have registered their results for this heap?")) return;
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/heap/start-next", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      throw new Error(detail.detail || "Server error " + resp.status);
+    }
+    const data = await resp.json();
+    renderHeapInfo(data);
+    updateAdminHeap(data.current_heap);
+  } catch (err) {
+    showError("Could not start next heap: " + err.message);
+  }
+});
+
+document.getElementById("set-heap-btn").addEventListener("click", async () => {
+  const heapStr = prompt("Enter the heap number to set:");
+  if (!heapStr) return;
+  const heapNum = parseInt(heapStr, 10);
+  if (isNaN(heapNum) || heapNum < 1) {
+    showError("Heap must be a positive number");
+    return;
+  }
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/heap/set", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+      body: JSON.stringify({ heap: heapNum }),
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      throw new Error(detail.detail || "Server error " + resp.status);
+    }
+    const data = await resp.json();
+    renderHeapInfo(data);
+    updateAdminHeap(data.current_heap);
+  } catch (err) {
+    showError("Could not set heap: " + err.message);
+  }
+});
+
+document.getElementById("refresh-heap-btn").addEventListener("click", loadHeapInfo);
+
+// ── Admin ─────────────────────────────────────────────────────────────
+
+let adminToken = null;
+
+function updateAdminHeap(heapNum) {
+  document.getElementById("admin-heap-number").textContent = heapNum;
+}
+
+async function loadAdminHeapInfo() {
+  try {
+    const resp = await fetch(API_BASE_URL + "/heap");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    updateAdminHeap(data.current_heap);
+  } catch (err) {
+    // ignore
+  }
+}
+
+document.getElementById("admin-login-btn").addEventListener("click", async () => {
+  const pin = document.getElementById("admin-pin").value.trim();
+  if (!pin) return;
+
+  // Validate the PIN by making a lightweight admin call
+  try {
+    const resp = await fetch(API_BASE_URL + "/admin/verify", {
+      method: "POST",
+      headers: { "X-Admin-Token": pin },
+    });
+    if (!resp.ok) {
+      document.getElementById("admin-error").classList.remove("hidden");
+      setTimeout(() => document.getElementById("admin-error").classList.add("hidden"), 3000);
+      return;
+    }
+    adminToken = pin;
+    document.getElementById("admin-login").classList.add("hidden");
+    document.getElementById("admin-panel").classList.remove("hidden");
+    loadAdminHeapInfo();
+  } catch (err) {
+    showError("Could not verify PIN: " + err.message);
+  }
+});
+
+// Allow pressing Enter in the PIN field
+document.getElementById("admin-pin").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    document.getElementById("admin-login-btn").click();
+  }
+});
+
 // Initial load
 loadLeaderboard();
 populateTeamDropdowns();
+loadCurrentHeap();

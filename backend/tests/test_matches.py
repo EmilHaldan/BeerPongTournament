@@ -15,6 +15,7 @@ def test_create_match_success() -> None:
             "team2_name": "Beta",
             "team1_score": 6,
             "team2_score": 4,
+            "heap": 2,
         },
     )
     assert resp.status_code == 201
@@ -23,8 +24,25 @@ def test_create_match_success() -> None:
     assert data["team2_name"] == "Beta"
     assert data["team1_score"] == 6
     assert data["team2_score"] == 4
+    # heap is locked to the current heap (defaults to 1), regardless of input
+    assert data["heap"] == 1
     assert "id" in data
     assert "created_at" in data
+
+
+def test_create_match_heap_defaults_to_zero() -> None:
+    resp = client.post(
+        "/matches",
+        json={
+            "team1_name": "Alpha",
+            "team2_name": "Beta",
+            "team1_score": 5,
+            "team2_score": 3,
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["heap"] == 1
 
 
 def test_create_match_normalises_names() -> None:

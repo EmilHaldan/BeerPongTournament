@@ -1,19 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Beer Pong Tournament</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
   <header>
     <h1>🍺 Beer Pong Tournament</h1>
     <nav>
       <button class="tab active" data-tab="scoreboard">Scoreboard</button>
+      <button class="tab" data-tab="nextheap">Next Heap</button>
       <button class="tab" data-tab="matches">Matches</button>
       <button class="tab" data-tab="register">Register Score</button>
       <button class="tab" data-tab="teams">Teams</button>
+      <button class="tab" data-tab="admin">Admin</button>
     </nav>
   </header>
 
@@ -32,13 +36,31 @@
             <th>Wins</th>
             <th>Losses</th>
             <th>Total Score</th>
+            <th>Matches</th>
           </tr>
         </thead>
         <tbody id="leaderboard-body">
-          <tr><td colspan="5" class="empty-msg">No matches yet</td></tr>
+          <tr>
+            <td colspan="6" class="empty-msg">No matches yet</td>
+          </tr>
         </tbody>
       </table>
       <button id="refresh-btn" class="btn secondary">Refresh</button>
+    </section>
+
+    <!-- Next Heap tab -->
+    <section id="tab-nextheap" class="tab-content">
+      <div id="heap-display" class="heap-display">
+        <div class="heap-number-label">Current Heap</div>
+        <div id="heap-number" class="heap-number">1</div>
+      </div>
+      <h2 style="text-align:center; margin: 1.5rem 0 1rem;">Matchups</h2>
+      <div id="heap-matchups" class="heap-matchups">
+        <p class="empty-msg">No matchups generated yet</p>
+      </div>
+      <div class="heap-actions">
+        <button id="refresh-heap-btn" class="btn secondary">Refresh</button>
+      </div>
     </section>
 
     <!-- Matches tab -->
@@ -51,12 +73,15 @@
             <th>Score</th>
             <th>Score</th>
             <th>Team 2</th>
+            <th>Heap</th>
             <th>Date</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="matches-body">
-          <tr><td colspan="6" class="empty-msg">No matches yet</td></tr>
+          <tr>
+            <td colspan="6" class="empty-msg">No matches yet</td>
+          </tr>
         </tbody>
       </table>
       <button id="refresh-matches-btn" class="btn secondary">Refresh</button>
@@ -64,7 +89,7 @@
 
     <!-- Register score tab -->
     <section id="tab-register" class="tab-content">
-      <h2>Register Match Result</h2>
+      <h2>Register Match Result (Trust based, dont be asshole)</h2>
       <form id="match-form">
         <div class="form-row">
           <div class="form-group">
@@ -91,6 +116,12 @@
             <input type="number" id="team2_score" name="team2_score" required min="0" max="6" value="0" />
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="heap">Heap (locked to current)</label>
+            <input type="number" id="heap" name="heap" min="0" value="1" readonly class="locked-input" />
+          </div>
+        </div>
         <button type="submit" class="btn primary">Submit Match</button>
       </form>
       <div id="success-msg" class="success-msg hidden">Match registered! ✓</div>
@@ -108,14 +139,46 @@
           </tr>
         </thead>
         <tbody id="teams-body">
-          <tr><td colspan="3" class="empty-msg">No teams registered yet</td></tr>
+          <tr>
+            <td colspan="3" class="empty-msg">No teams registered yet</td>
+          </tr>
         </tbody>
       </table>
       <button id="refresh-teams-btn" class="btn secondary">Refresh</button>
+    </section>
+
+    <!-- Admin tab -->
+    <section id="tab-admin" class="tab-content">
+      <!-- Login gate -->
+      <div id="admin-login" class="admin-login">
+        <h2>Admin Access</h2>
+        <p class="admin-hint">Enter the admin PIN to continue</p>
+        <div class="admin-pin-row">
+          <input type="password" id="admin-pin" placeholder="PIN" class="admin-pin-input" />
+          <button id="admin-login-btn" class="btn primary">Unlock</button>
+        </div>
+        <div id="admin-error" class="admin-error hidden">Invalid PIN</div>
+      </div>
+      <!-- Admin panel (shown after login) -->
+      <div id="admin-panel" class="admin-panel hidden">
+        <h2>Admin Panel</h2>
+        <div class="admin-section">
+          <h3>Heap Management</h3>
+          <div id="admin-heap-display" class="admin-heap-display">
+            <span class="admin-heap-label">Current Heap:</span>
+            <span id="admin-heap-number" class="admin-heap-value">1</span>
+          </div>
+          <div class="admin-actions">
+            <button id="set-heap-btn" class="btn secondary">Set Heap</button>
+            <button id="start-next-heap-btn" class="btn primary">Start Next Heap</button>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
+
 </html>

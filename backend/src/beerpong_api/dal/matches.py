@@ -21,6 +21,7 @@ def insert_match(payload: MatchCreate) -> MatchResult:
         team2_name=_normalize_team_name(payload.team2_name),
         team1_score=payload.team1_score,
         team2_score=payload.team2_score,
+        heap=payload.heap,
     )
 
     container = get_container()
@@ -42,7 +43,9 @@ def delete_match(match_id: str) -> bool:
 
     Returns True if the item was deleted, False if it was not found.
     """
-    from azure.cosmos.exceptions import CosmosResourceNotFoundError  # pyright: ignore[reportMissingImports]
+    from azure.cosmos.exceptions import (
+        CosmosResourceNotFoundError,  # pyright: ignore[reportMissingImports]
+    )
 
     container = get_container()
     try:

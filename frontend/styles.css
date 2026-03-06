@@ -248,6 +248,7 @@ tbody tr:hover {
   .form-row {
     flex-direction: column;
   }
+
   header h1 {
     font-size: 1.5rem;
   }
@@ -282,4 +283,277 @@ tbody tr:hover {
   color: #fff;
 }
 
+/* ── Next Heap tab ──────────────────────────────────────────────────── */
 
+.heap-display {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.heap-number-label {
+  font-size: 1.2rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+
+.heap-number {
+  font-size: 6rem;
+  font-weight: 900;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.heap-matchups {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.matchup-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  background: var(--surface);
+  border: 2px solid var(--surface2);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.5rem;
+}
+
+.matchup-team {
+  flex: 1;
+  text-align: center;
+}
+
+.matchup-name {
+  display: inline;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.matchup-pts {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.matchup-vs {
+  font-weight: 900;
+  font-size: 1.5rem;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.matchup-table {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.matchup-color {
+  font-size: 0.9rem;
+  vertical-align: middle;
+  margin: 0 0.3rem;
+}
+
+.matchup-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.matchup-score {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--success);
+}
+
+.matchup-score.pending {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.winner-medal {
+  font-size: 1.3rem;
+  margin: 0 0.3rem;
+}
+
+.matchup-recorded {
+  border-color: var(--success);
+}
+
+.matchup-pending {
+  border-color: var(--surface2);
+}
+
+.heap-summary {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin-top: 0.5rem;
+}
+
+.heap-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.heap-actions .btn.primary {
+  width: auto;
+  padding: 0.8rem 2rem;
+  font-size: 1.1rem;
+}
+
+/* ── Locked input ───────────────────────────────────────────────────── */
+
+.locked-input {
+  opacity: 0.7;
+  cursor: not-allowed;
+  background: var(--surface) !important;
+  border-color: var(--surface2) !important;
+}
+
+@media (max-width: 500px) {
+  .heap-number {
+    font-size: 4rem;
+  }
+
+  .matchup-card {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .matchup-name {
+    font-size: 1.1rem;
+  }
+
+  .heap-actions {
+    flex-direction: column;
+  }
+}
+
+/* ── Admin tab ──────────────────────────────────────────────────────── */
+
+.admin-login {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.admin-hint {
+  color: var(--text-muted);
+  margin: 0.5rem 0 1.5rem;
+}
+
+.admin-pin-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.admin-pin-input {
+  flex: 1;
+  padding: 0.6rem 0.8rem;
+  border: 2px solid var(--surface2);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1.1rem;
+  text-align: center;
+  letter-spacing: 0.2em;
+}
+
+.admin-pin-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.admin-pin-row .btn.primary {
+  width: auto;
+  margin-top: 0;
+  padding: 0.6rem 1.5rem;
+}
+
+.admin-error {
+  color: var(--error);
+  margin-top: 0.75rem;
+  font-weight: 600;
+}
+
+.admin-panel h2 {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.admin-section {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.admin-section h3 {
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin-heap-display {
+  text-align: center;
+  margin-bottom: 1.2rem;
+}
+
+.admin-heap-label {
+  font-size: 1rem;
+  color: var(--text-muted);
+  margin-right: 0.5rem;
+}
+
+.admin-heap-value {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--accent);
+}
+
+.admin-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.admin-actions .btn {
+  flex: 1;
+  max-width: 200px;
+}
+
+.admin-actions .btn.primary {
+  width: auto;
+  margin-top: 0;
+}
+
+@media (max-width: 500px) {
+  .admin-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .admin-actions .btn {
+    max-width: 100%;
+    width: 100%;
+  }
+}

@@ -23,14 +23,16 @@ def compute_leaderboard() -> list[LeaderboardEntry]:
     Sorted by ``total_wins`` descending, then ``total_score`` descending.
     """
     stats: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"total_score": 0, "total_wins": 0, "total_loss": 0},
+        lambda: {"total_score": 0, "total_wins": 0, "total_loss": 0, "total_matches": 0},
     )
 
     for match in list_matches():
         # Team 1
         stats[match.team1_name]["total_score"] += match.team1_score
+        stats[match.team1_name]["total_matches"] += 1
         # Team 2
         stats[match.team2_name]["total_score"] += match.team2_score
+        stats[match.team2_name]["total_matches"] += 1
 
         if match.team1_score > match.team2_score:
             stats[match.team1_name]["total_wins"] += 1
@@ -40,8 +42,6 @@ def compute_leaderboard() -> list[LeaderboardEntry]:
             stats[match.team1_name]["total_loss"] += 1
         # Ties: no change to wins/losses
 
-    entries = [
-        LeaderboardEntry(team_name=team, **s) for team, s in stats.items()
-    ]
+    entries = [LeaderboardEntry(team_name=team, **s) for team, s in stats.items()]
     entries.sort(key=lambda e: (e.total_wins, e.total_score), reverse=True)
     return entries

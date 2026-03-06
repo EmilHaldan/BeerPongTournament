@@ -9,8 +9,7 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "azure-cosmos>=4.7.0",
     "pydantic>=2.9.0",
-    "python-multipart>=0.0.9",
-    "just>=0.8.165",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.scripts]

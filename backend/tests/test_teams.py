@@ -1,21 +1,61 @@
-"""Tests for team registration and listing."""
+"""Tests for team management and CSV loading."""
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
+from beerpong_api.dal.teams import create_team, load_teams_from_csv
+from beerpong_api.db.models import TeamCreate
 from beerpong_api.main import app
 
 client = TestClient(app)
 
 
-def test_create_team() -> None:
-    resp = client.post("/teams", json={"name": "Alpha", "members": ["Alice", "Bob"]})
-    assert resp.status_code == 201
-    data = resp.json()
-    assert data["name"] == "Alpha"
-    assert data["members"] == ["Alice", "Bob"]
-    assert "id" in data
+# ── Helper ────────────────────────────────────────────────────────────
+
+def _register_team(name: str, members: list[str]) -> None:
+    """Register a team via the DAL (no HTTP endpoint for team creation)."""
+    create_team(TeamCreate(name=name, members=members))
+
+
+# ── Team model validation ────────────────────────────────────────────
+
+
+def test_team_create_rejects_one_member() -> None:
+    """TeamCreate model requires at least 2 members."""
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        TeamCreate(name="Solo", members=["OnlyOne"])
+
+
+def test_team_create_rejects_four_members() -> None:
+    """TeamCreate model allows at most 3 members."""
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        TeamCreate(name="Big", members=["A", "B", "C", "D"])
+
+
+def test_team_create_allows_two_members() -> None:
+    _register_team("Duo", ["Alice", "Bob"])
+    names = client.get("/teams/names").json()
+    assert "Duo" in names
+
+
+def test_team_create_allows_three_members() -> None:
+    _register_team("Trio", ["Alice", "Bob", "Carol"])
+    teams = client.get("/teams").json()
+    trio = [t for t in teams if t["name"] == "Trio"][0]
+    assert len(trio["members"]) == 3
+
+
+# ── Team listing ─────────────────────────────────────────────────────
 
 
 def test_list_teams_empty() -> None:
@@ -25,7 +65,7 @@ def test_list_teams_empty() -> None:
 
 
 def test_list_teams_after_create() -> None:
-    client.post("/teams", json={"name": "Bravo", "members": ["Carol", "Dave"]})
+    _register_team("Bravo", ["Carol", "Dave"])
     resp = client.get("/teams")
     assert resp.status_code == 200
     teams = resp.json()
@@ -34,25 +74,19 @@ def test_list_teams_after_create() -> None:
 
 
 def test_get_team_names() -> None:
-    client.post("/teams", json={"name": "Zulu", "members": ["Z1"]})
-    client.post("/teams", json={"name": "Alpha", "members": ["A1"]})
+    _register_team("Zulu", ["Z1", "Z2"])
+    _register_team("Alpha", ["A1", "A2"])
     resp = client.get("/teams/names")
     assert resp.status_code == 200
     names = resp.json()
-    # Should be sorted alphabetically
     assert names == ["Alpha", "Zulu"]
 
 
-def test_duplicate_team_rejected() -> None:
-    client.post("/teams", json={"name": "Echo", "members": ["E1", "E2"]})
-    resp = client.post("/teams", json={"name": "echo", "members": ["E3"]})
-    assert resp.status_code == 409
+# ── Match / team interaction ─────────────────────────────────────────
 
 
 def test_match_requires_registered_team() -> None:
-    # Register one team
-    client.post("/teams", json={"name": "Registered", "members": ["R1"]})
-    # Try to create match with unregistered team
+    _register_team("Registered", ["R1", "R2"])
     resp = client.post(
         "/matches",
         json={
@@ -67,8 +101,8 @@ def test_match_requires_registered_team() -> None:
 
 
 def test_match_succeeds_with_registered_teams() -> None:
-    client.post("/teams", json={"name": "Foxes", "members": ["F1", "F2"]})
-    client.post("/teams", json={"name": "Wolves", "members": ["W1", "W2"]})
+    _register_team("Foxes", ["F1", "F2"])
+    _register_team("Wolves", ["W1", "W2"])
     resp = client.post(
         "/matches",
         json={
@@ -80,75 +114,71 @@ def test_match_succeeds_with_registered_teams() -> None:
     )
     assert resp.status_code == 201
 
-# ── CSV upload tests ──────────────────────────────────────────────────
+
+# ── CSV auto-load tests ──────────────────────────────────────────────
 
 
-def test_upload_csv_creates_teams() -> None:
+def test_load_teams_from_csv_creates_teams() -> None:
     csv_content = "team_name,member1,member2\nAlpha,Alice,Bob\nBravo,Carol,Dave\n"
-    resp = client.post(
-        "/teams/upload-csv",
-        files={"file": ("teams.csv", csv_content, "text/csv")},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["created_count"] == 2
-    assert data["skipped_count"] == 0
-    assert "Alpha" in data["created"]
-    assert "Bravo" in data["created"]
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+        f.flush()
+        result = load_teams_from_csv(f.name)
 
-    # Verify teams exist
-    teams_resp = client.get("/teams/names")
-    names = teams_resp.json()
+    assert len(result["created"]) == 2
+    assert "Alpha" in result["created"]
+    assert "Bravo" in result["created"]
+
+    names = client.get("/teams/names").json()
     assert "Alpha" in names
     assert "Bravo" in names
+    Path(f.name).unlink(missing_ok=True)
 
 
-def test_upload_csv_skips_duplicates() -> None:
-    # Pre-register one team
-    client.post("/teams", json={"name": "Alpha", "members": ["Alice", "Bob"]})
+def test_load_teams_from_csv_skips_duplicates() -> None:
+    _register_team("Alpha", ["Alice", "Bob"])
 
     csv_content = "team_name,member1,member2\nAlpha,Alice,Bob\nBravo,Carol,Dave\n"
-    resp = client.post(
-        "/teams/upload-csv",
-        files={"file": ("teams.csv", csv_content, "text/csv")},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["created_count"] == 1
-    assert data["skipped_count"] == 1
-    assert "Bravo" in data["created"]
-    assert "Alpha" in data["skipped"]
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+        f.flush()
+        result = load_teams_from_csv(f.name)
+
+    assert len(result["created"]) == 1
+    assert len(result["skipped"]) == 1
+    assert "Bravo" in result["created"]
+    assert "Alpha" in result["skipped"]
+    Path(f.name).unlink(missing_ok=True)
 
 
-def test_upload_csv_no_header() -> None:
-    csv_content = "Echo,Eve,Frank\nFoxes,Grace,Hank\n"
-    resp = client.post(
-        "/teams/upload-csv",
-        files={"file": ("teams.csv", csv_content, "text/csv")},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["created_count"] == 2
+def test_load_teams_from_csv_missing_file() -> None:
+    result = load_teams_from_csv("/nonexistent/teams.csv")
+    assert result == {"created": [], "skipped": []}
 
 
-def test_upload_csv_empty_file() -> None:
-    resp = client.post(
-        "/teams/upload-csv",
-        files={"file": ("empty.csv", "", "text/csv")},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["created_count"] == 0
-    assert data["skipped_count"] == 0
+def test_load_teams_from_csv_skips_rows_with_too_few_members() -> None:
+    csv_content = "team_name,member1,member2\nSolo,OnlyOne\nValid,Alice,Bob\n"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+        f.flush()
+        result = load_teams_from_csv(f.name)
+
+    assert len(result["created"]) == 1
+    assert "Valid" in result["created"]
+    Path(f.name).unlink(missing_ok=True)
 
 
-def test_upload_csv_skips_rows_with_only_name() -> None:
-    csv_content = "team_name,member1\nOnlyName\nValid,Player1\n"
-    resp = client.post(
-        "/teams/upload-csv",
-        files={"file": ("teams.csv", csv_content, "text/csv")},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["created_count"] == 1
-    assert "Valid" in data["created"]
+def test_load_teams_from_csv_allows_three_members() -> None:
+    csv_content = "team_name,member1,member2,member3\nTrio,Alice,Bob,Carol\n"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+        f.flush()
+        result = load_teams_from_csv(f.name)
+
+    assert len(result["created"]) == 1
+    assert "Trio" in result["created"]
+
+    teams = client.get("/teams").json()
+    trio = [t for t in teams if t["name"] == "Trio"][0]
+    assert len(trio["members"]) == 3
+    Path(f.name).unlink(missing_ok=True)

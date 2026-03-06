@@ -1,0 +1,14 @@
+# Justfile for frontend development commands
+# Usage: just <target>
+
+# Default recipe
+default:
+    just --list
+
+# Serve the frontend locally on port 3000
+run:
+    python -m http.server 3000
+
+# Open the frontend in the default browser
+open:
+    start http://localhost:3000

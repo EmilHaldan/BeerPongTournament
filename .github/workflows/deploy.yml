@@ -1,0 +1,137 @@
+# ── Deploy – Push to main ─────────────────────────────────────────────
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  # ── 1. Terraform Apply ─────────────────────────────────────────────
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    outputs:
+      backend_url: ${{ steps.tf-output.outputs.backend_url }}
+      frontend_url: ${{ steps.tf-output.outputs.frontend_url }}
+      acr_login_server: ${{ steps.tf-output.outputs.acr_login_server }}
+      acr_name: ${{ steps.tf-output.outputs.acr_name }}
+      resource_group_name: ${{ steps.tf-output.outputs.resource_group_name }}
+      swa_api_key: ${{ steps.tf-output.outputs.swa_api_key }}
+      container_app_name: ${{ steps.tf-output.outputs.container_app_name }}
+      container_app_env_name: ${{ steps.tf-output.outputs.container_app_env_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+          terraform_wrapper: false
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve \
+            -var-file=env/dev.tfvars \
+            -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -var="admin_token=${{ secrets.ADMIN_TOKEN }}"
+
+      - name: Capture Terraform Outputs
+        id: tf-output
+        run: |
+          echo "backend_url=$(terraform output -raw backend_url)" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=$(terraform output -raw frontend_url)" >> "$GITHUB_OUTPUT"
+          echo "acr_login_server=$(terraform output -raw acr_login_server)" >> "$GITHUB_OUTPUT"
+          echo "acr_name=$(terraform output -raw acr_name)" >> "$GITHUB_OUTPUT"
+          echo "resource_group_name=$(terraform output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
+          echo "swa_api_key=$(terraform output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
+          echo "container_app_name=$(terraform output -raw container_app_name)" >> "$GITHUB_OUTPUT"
+          echo "container_app_env_name=$(terraform output -raw container_app_env_name)" >> "$GITHUB_OUTPUT"
+
+  # ── 2. Build & Deploy Backend ───────────────────────────────────────
+  deploy-backend:
+    name: Deploy Backend
+    needs: terraform-apply
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR
+        run: az acr login --name ${{ needs.terraform-apply.outputs.acr_name }}
+
+      - name: Build & Push Docker image
+        working-directory: backend
+        run: |
+          IMAGE="${{ needs.terraform-apply.outputs.acr_login_server }}/beerpong-api:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Update Container App image
+        run: |
+          az containerapp update \
+            --name ${{ needs.terraform-apply.outputs.container_app_name }} \
+            --resource-group ${{ needs.terraform-apply.outputs.resource_group_name }} \
+            --image "${{ needs.terraform-apply.outputs.acr_login_server }}/beerpong-api:${{ github.sha }}"
+
+  # ── 3. Deploy Frontend ─────────────────────────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: [terraform-apply, deploy-backend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write config.js with backend URL
+        run: |
+          echo "const API_BASE_URL = \"${{ needs.terraform-apply.outputs.backend_url }}\";" \
+            > frontend/config.js
+
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ needs.terraform-apply.outputs.swa_api_key }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: frontend
+          skip_app_build: true
+          skip_api_build: true
+
+  # ── Summary ─────────────────────────────────────────────────────────
+  summary:
+    name: Print URLs
+    needs: [terraform-apply, deploy-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show deployment URLs
+        run: |
+          echo "========================================="
+          echo "  Frontend: ${{ needs.terraform-apply.outputs.frontend_url }}"
+          echo "  Backend:  ${{ needs.terraform-apply.outputs.backend_url }}"
+          echo "========================================="

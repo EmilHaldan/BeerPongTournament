@@ -1,0 +1,285 @@
+/* ── Beer Pong Tournament – Styles ─────────────────────────────────── */
+
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface2: #0f3460;
+  --accent: #e94560;
+  --accent-hover: #ff6b81;
+  --text: #f5f5f5;
+  --text-muted: #a0a0b0;
+  --success: #2ecc71;
+  --error: #e74c3c;
+  --radius: 8px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+
+header {
+  text-align: center;
+  padding: 2rem 1rem 1rem;
+}
+
+header h1 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+nav {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.tab {
+  padding: 0.6rem 1.5rem;
+  border: 2px solid var(--surface2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ── Main ───────────────────────────────────────────────────────────── */
+
+main {
+  max-width: 700px;
+  margin: 1.5rem auto;
+  padding: 0 1rem;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+h2 {
+  margin-bottom: 1rem;
+  font-size: 1.4rem;
+}
+
+/* ── Table ──────────────────────────────────────────────────────────── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+th,
+td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+
+thead th {
+  background: var(--surface2);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+tbody tr {
+  border-bottom: 1px solid var(--surface2);
+}
+
+tbody tr:hover {
+  background: var(--surface);
+}
+
+.empty-msg {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 2rem;
+}
+
+/* ── Form ───────────────────────────────────────────────────────────── */
+
+#match-form {
+  background: var(--surface);
+  padding: 1.5rem;
+  border-radius: var(--radius);
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.form-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.form-group input {
+  padding: 0.6rem 0.8rem;
+  border: 2px solid var(--surface2);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.form-group select {
+  padding: 0.6rem 0.8rem;
+  border: 2px solid var(--surface2);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a0a0b0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.8rem center;
+  padding-right: 2rem;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.versus {
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--accent);
+  margin: 0.5rem 0;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────── */
+
+.btn {
+  padding: 0.7rem 1.5rem;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.btn.primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn.secondary {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.btn.secondary:hover {
+  background: var(--accent);
+}
+
+/* ── Banners ────────────────────────────────────────────────────────── */
+
+.error-banner {
+  background: var(--error);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.success-msg {
+  background: var(--success);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.hidden {
+  display: none;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+
+@media (max-width: 500px) {
+  .form-row {
+    flex-direction: column;
+  }
+  header h1 {
+    font-size: 1.5rem;
+  }
+}
+
+/* ── Match history ──────────────────────────────────────────────────── */
+
+.score-cell {
+  text-align: center;
+  font-weight: 700;
+}
+
+.date-cell {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.btn-delete {
+  background: transparent;
+  border: 1px solid var(--error);
+  color: var(--error);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.btn-delete:hover {
+  background: var(--error);
+  color: #fff;
+}
+
+

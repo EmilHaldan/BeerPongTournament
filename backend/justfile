@@ -1,0 +1,49 @@
+# Justfile for backend development commands
+# Usage: just <target>
+
+# Default recipe
+default:
+    just --list
+
+# Install all dependencies (including dev)
+install:
+    uv sync
+
+# Run the API server locally
+run:
+    uv run uvicorn beerpong_api.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Run tests
+test:
+    uv run pytest -v
+
+# Run type checker
+typecheck:
+    uv run basedpyright src/
+
+# Run linter
+lint:
+    uv run ruff check src/ tests/
+
+# Add packages to the project
+add package:
+    uv add $package
+
+remove package:
+    uv remove $package
+
+# Register a team: just mk-team "Team Name" member1 member2 member3
+mk-team name *members:
+    uv run python -c "import httpx, sys; r=httpx.post('http://localhost:8000/teams', json={'name': '{{name}}', 'members': '{{members}}'.split()}); print(r.json()) if r.is_success else sys.exit(f'Error {r.status_code}: {r.text}')"
+
+# Run formatter
+fmt:
+    uv run ruff format src/ tests/
+
+# Run all checks (lint + typecheck + test)
+check: lint typecheck test
+
+# Clean caches
+clean:
+    rm -rf __pycache__ .pytest_cache .ruff_cache
+    find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

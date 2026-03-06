@@ -222,3 +222,5 @@ override.tf.json
 beerpong_local.db
 beerpong_local.db-wal
 beerpong_local.db-shm
+
+.vscode/settings.json

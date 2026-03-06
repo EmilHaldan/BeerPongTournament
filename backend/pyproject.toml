@@ -1,0 +1,66 @@
+[project]
+name = "beerpong-api"
+version = "0.1.0"
+description = "Beer Pong Tournament API – FastAPI backend"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "azure-cosmos>=4.7.0",
+    "pydantic>=2.9.0",
+    "python-multipart>=0.0.9",
+    "just>=0.8.165",
+]
+
+[project.scripts]
+beerpong-api = "beerpong_api.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/beerpong_api"]
+
+# ---------------------------------------------------------------------------
+# basedpyright
+# ---------------------------------------------------------------------------
+[tool.basedpyright]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+include = ["src"]
+exclude = ["tests"]
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportUnknownParameterType = false
+
+# ---------------------------------------------------------------------------
+# ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "PLW"]
+ignore = ["E501"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.20.0",
+    "httpx>=0.27.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.7.0",
+]

@@ -21,7 +21,7 @@ def insert_match(payload: MatchCreate) -> MatchResult:
         team2_name=_normalize_team_name(payload.team2_name),
         team1_score=payload.team1_score,
         team2_score=payload.team2_score,
-        heap=payload.heap,
+        heat=payload.heat,
     )
 
     container = get_container()

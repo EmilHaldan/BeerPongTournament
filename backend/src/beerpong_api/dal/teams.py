@@ -42,6 +42,16 @@ def get_team_names() -> list[str]:
     return sorted(t.name for t in teams)
 
 
+def delete_team(team_id: str) -> bool:
+    """Delete a team by ID. Returns True if deleted, False if not found."""
+    container = get_teams_container()
+    try:
+        container.delete_item(item=team_id, partition_key="default")
+        return True
+    except Exception:
+        return False
+
+
 def _import_teams_from_csv_content(content: str) -> dict[str, list[str]]:
     """Parse CSV content and create teams.
 

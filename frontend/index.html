@@ -12,11 +12,11 @@
   <header>
     <h1>🍺 Beer Pong Tournament</h1>
     <nav>
-      <button class="tab active" data-tab="scoreboard">Scoreboard</button>
-      <button class="tab" data-tab="nextheap">Next Heap</button>
-      <button class="tab" data-tab="matches">Matches</button>
+      <button class="tab active" data-tab="nextheat">Next Heat</button>
+      <button class="tab" data-tab="scoreboard">Scoreboard</button>
       <button class="tab" data-tab="register">Register Score</button>
       <button class="tab" data-tab="teams">Teams</button>
+      <button class="tab" data-tab="matches">Matches</button>
       <button class="tab" data-tab="admin">Admin</button>
     </nav>
   </header>
@@ -26,7 +26,7 @@
     <div id="error-banner" class="error-banner hidden"></div>
 
     <!-- Scoreboard tab -->
-    <section id="tab-scoreboard" class="tab-content active">
+    <section id="tab-scoreboard" class="tab-content">
       <h2>Leaderboard</h2>
       <table id="leaderboard-table">
         <thead>
@@ -48,18 +48,18 @@
       <button id="refresh-btn" class="btn secondary">Refresh</button>
     </section>
 
-    <!-- Next Heap tab -->
-    <section id="tab-nextheap" class="tab-content">
-      <div id="heap-display" class="heap-display">
-        <div class="heap-number-label">Current Heap</div>
-        <div id="heap-number" class="heap-number">1</div>
+    <!-- Next Heat tab -->
+    <section id="tab-nextheat" class="tab-content active">
+      <div id="heat-display" class="heat-display">
+        <div class="heat-number-label">Current Heat</div>
+        <div id="heat-number" class="heat-number">1</div>
       </div>
       <h2 style="text-align:center; margin: 1.5rem 0 1rem;">Matchups</h2>
-      <div id="heap-matchups" class="heap-matchups">
+      <div id="heat-matchups" class="heat-matchups">
         <p class="empty-msg">No matchups generated yet</p>
       </div>
-      <div class="heap-actions">
-        <button id="refresh-heap-btn" class="btn secondary">Refresh</button>
+      <div class="heat-actions">
+        <button id="refresh-heat-btn" class="btn secondary">Refresh</button>
       </div>
     </section>
 
@@ -73,7 +73,7 @@
             <th>Score</th>
             <th>Score</th>
             <th>Team 2</th>
-            <th>Heap</th>
+            <th>Heat</th>
             <th>Date</th>
             <th></th>
           </tr>
@@ -118,8 +118,8 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="heap">Heap (locked to current)</label>
-            <input type="number" id="heap" name="heap" min="0" value="1" readonly class="locked-input" />
+            <label for="heat">Heat (locked to current)</label>
+            <input type="number" id="heat" name="heat" min="0" value="1" readonly class="locked-input" />
           </div>
         </div>
         <button type="submit" class="btn primary">Submit Match</button>
@@ -162,15 +162,62 @@
       <!-- Admin panel (shown after login) -->
       <div id="admin-panel" class="admin-panel hidden">
         <h2>Admin Panel</h2>
+
+        <!-- Add Team -->
         <div class="admin-section">
-          <h3>Heap Management</h3>
-          <div id="admin-heap-display" class="admin-heap-display">
-            <span class="admin-heap-label">Current Heap:</span>
-            <span id="admin-heap-number" class="admin-heap-value">1</span>
+          <h3>Add Team</h3>
+          <form id="add-team-form">
+            <div class="form-group">
+              <label for="new-team-name">Team Name</label>
+              <input type="text" id="new-team-name" placeholder="e.g. The Chuggers" required />
+            </div>
+            <div class="form-group">
+              <label for="new-team-member1">Member 1</label>
+              <input type="text" id="new-team-member1" placeholder="Name" required />
+            </div>
+            <div class="form-group">
+              <label for="new-team-member2">Member 2</label>
+              <input type="text" id="new-team-member2" placeholder="Name" required />
+            </div>
+            <div class="form-group">
+              <label for="new-team-member3">Member 3 (optional)</label>
+              <input type="text" id="new-team-member3" placeholder="Name" />
+            </div>
+            <button type="submit" class="btn primary">Add Team</button>
+          </form>
+          <div id="add-team-success" class="success-msg hidden">Team added! ✓</div>
+        </div>
+
+        <!-- Manage Teams -->
+        <div class="admin-section">
+          <h3>Manage Teams</h3>
+          <table id="admin-teams-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Team Name</th>
+                <th>Members</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="admin-teams-body">
+              <tr>
+                <td colspan="4" class="empty-msg">No teams yet</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Heat Management -->
+        <div class="admin-section">
+          <h3>Heat Management</h3>
+          <div id="admin-heat-display" class="admin-heat-display">
+            <span class="admin-heat-label">Current Heat:</span>
+            <span id="admin-heat-number" class="admin-heat-value">1</span>
           </div>
           <div class="admin-actions">
-            <button id="set-heap-btn" class="btn secondary">Set Heap</button>
-            <button id="start-next-heap-btn" class="btn primary">Start Next Heap</button>
+            <button id="set-heat-btn" class="btn secondary">Set Heat</button>
+            <button id="start-next-heat-btn" class="btn primary">Start Next Heat</button>
           </div>
         </div>
       </div>

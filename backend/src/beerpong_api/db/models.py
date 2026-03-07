@@ -19,7 +19,7 @@ class MatchCreate(BaseModel):
     team2_name: str = Field(..., min_length=1, max_length=100, description="Name of team 2")
     team1_score: int = Field(..., ge=0, le=6, description="Score of team 1 (0–6)")
     team2_score: int = Field(..., ge=0, le=6, description="Score of team 2 (0–6)")
-    heap: int = Field(1, ge=0, description="Heap count for the match")
+    heat: int = Field(1, ge=0, description="Heat count for the match")
 
 
 class MatchResult(BaseModel):
@@ -33,7 +33,7 @@ class MatchResult(BaseModel):
     team2_name: str
     team1_score: int
     team2_score: int
-    heap: int = 1
+    heat: int = 1
     tournament_id: str = Field(default="default", alias="tournamentId")
 
     model_config = {"populate_by_name": True}
@@ -49,19 +49,19 @@ class LeaderboardEntry(BaseModel):
     total_matches: int = 0
 
 
-class HeapState(BaseModel):
-    """Persisted state tracking the current heap number."""
+class HeatState(BaseModel):
+    """Persisted state tracking the current heat number."""
 
-    id: str = "heap_state"
-    current_heap: int = 1
-    stored_matchups: list[HeapMatchup] = []
+    id: str = "heat_state"
+    current_heat: int = 1
+    stored_matchups: list[HeatMatchup] = []
     tournament_id: str = Field(default="default", alias="tournamentId")
 
     model_config = {"populate_by_name": True}
 
 
-class HeapMatchup(BaseModel):
-    """A single matchup for a heap round."""
+class HeatMatchup(BaseModel):
+    """A single matchup for a heat round."""
 
     team1_name: str
     team2_name: str
@@ -73,11 +73,11 @@ class HeapMatchup(BaseModel):
     winner: str | None = None
 
 
-class HeapInfo(BaseModel):
-    """Full heap information returned by the API."""
+class HeatInfo(BaseModel):
+    """Full heat information returned by the API."""
 
-    current_heap: int
-    matchups: list[HeapMatchup] = []
+    current_heat: int
+    matchups: list[HeatMatchup] = []
     teams_recorded: list[str] = []
     teams_not_recorded: list[str] = []
 

@@ -7,16 +7,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Header, HTTPException
 
-from beerpong_api.dal.heap import advance_heap, get_heap_info, set_heap
+from beerpong_api.dal.heat import advance_heat, get_heat_info, set_heat
 from beerpong_api.dal.leaderboard import compute_leaderboard
 from beerpong_api.dal.matches import delete_match, insert_match, list_matches, reset_matches
-from beerpong_api.dal.teams import get_team_names, list_teams
+from beerpong_api.dal.teams import create_team, delete_team, get_team_names, list_teams
 from beerpong_api.db.models import (
-    HeapInfo,
+    HeatInfo,
     LeaderboardEntry,
     MatchCreate,
     MatchResult,
     Team,
+    TeamCreate,
 )
 from beerpong_api.settings import get_settings
 
@@ -62,9 +63,9 @@ def create_match(payload: MatchCreate) -> MatchResult:
 
     Validates inputs, normalises team names, writes to DB, and returns the
     saved match.  Both team names must belong to registered teams.
-    The heap value is locked to the current heap.
+    The heat value is locked to the current heat.
     """
-    from beerpong_api.dal.heap import get_current_heap
+    from beerpong_api.dal.heat import get_current_heat
 
     registered = get_team_names()
     t1 = payload.team1_name.strip().title()
@@ -74,10 +75,10 @@ def create_match(payload: MatchCreate) -> MatchResult:
     if registered and t2 not in registered:
         raise HTTPException(status_code=400, detail=f"Team '{t2}' is not registered")
 
-    # Override heap with the current heap value
-    current_heap = get_current_heap()
+    # Override heat with the current heat value
+    current_heat = get_current_heat()
     payload_dict = payload.model_dump()
-    payload_dict["heap"] = current_heap
+    payload_dict["heat"] = current_heat
     locked_payload = MatchCreate(**payload_dict)
 
     return insert_match(locked_payload)
@@ -99,6 +100,32 @@ def leaderboard() -> list[LeaderboardEntry]:
 def get_teams() -> list[Team]:
     """Return all registered teams."""
     return list_teams()
+
+
+@router.post("/teams", response_model=Team, status_code=201)
+def add_team(
+    payload: TeamCreate,
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> Team:
+    """Create a new team (admin only)."""
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    return create_team(payload)
+
+
+@router.delete("/teams/{team_id}", status_code=200)
+def remove_team(
+    team_id: str,
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> dict[str, str]:
+    """Delete a team by ID (admin only)."""
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    if not delete_team(team_id):
+        raise HTTPException(status_code=404, detail="Team not found")
+    return {"status": "deleted", "id": team_id}
 
 
 @router.get("/teams/names", response_model=list[str])
@@ -138,39 +165,39 @@ def admin_verify(
     return {"status": "ok"}
 
 
-# ── Heap ──────────────────────────────────────────────────────────────
+# ── Heat ──────────────────────────────────────────────────────────────
 
 
-@router.get("/heap", response_model=HeapInfo)
-def get_heap() -> HeapInfo:
-    """Return the current heap number and generated matchups.
+@router.get("/heat", response_model=HeatInfo)
+def get_heat() -> HeatInfo:
+    """Return the current heat number and generated matchups.
 
     Matchups are determined by pairing teams with similar total scores.
     """
-    return get_heap_info()
+    return get_heat_info()
 
 
-@router.post("/heap/start-next", response_model=HeapInfo, status_code=200)
-def start_next_heap(
+@router.post("/heat/start-next", response_model=HeatInfo, status_code=200)
+def start_next_heat(
     x_admin_token: str = Header(..., alias="X-Admin-Token"),
-) -> HeapInfo:
-    """Advance to the next heap and return the new matchups (admin only)."""
+) -> HeatInfo:
+    """Advance to the next heat and return the new matchups (admin only)."""
     settings = get_settings()
     if x_admin_token != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid admin token")
-    return advance_heap()
+    return advance_heat()
 
 
-@router.post("/heap/set", response_model=HeapInfo, status_code=200)
-def set_heap_value(
+@router.post("/heat/set", response_model=HeatInfo, status_code=200)
+def set_heat_value(
     payload: dict[str, int],
     x_admin_token: str = Header(..., alias="X-Admin-Token"),
-) -> HeapInfo:
-    """Set the heap to a specific value (admin only)."""
+) -> HeatInfo:
+    """Set the heat to a specific value (admin only)."""
     settings = get_settings()
     if x_admin_token != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid admin token")
-    heap_number = payload.get("heap")
-    if heap_number is None or heap_number < 1:
-        raise HTTPException(status_code=400, detail="Heap must be a positive integer")
-    return set_heap(heap_number)
+    heat_number = payload.get("heat")
+    if heat_number is None or heat_number < 1:
+        raise HTTPException(status_code=400, detail="Heat must be a positive integer")
+    return set_heat(heat_number)

@@ -12,11 +12,11 @@ document.querySelectorAll(".tab").forEach((btn) => {
     if (btn.dataset.tab === "scoreboard") loadLeaderboard();
     if (btn.dataset.tab === "matches") loadMatches();
     if (btn.dataset.tab === "teams") loadTeams();
-    if (btn.dataset.tab === "nextheap") loadHeapInfo();
-    if (btn.dataset.tab === "admin") loadAdminHeapInfo();
+    if (btn.dataset.tab === "nextheat") loadHeatInfo();
+    if (btn.dataset.tab === "admin") loadAdminHeatInfo();
     if (btn.dataset.tab === "register") {
       populateTeamDropdowns();
-      loadCurrentHeap();
+      loadCurrentHeat();
     }
   });
 });
@@ -86,7 +86,7 @@ document.getElementById("match-form").addEventListener("submit", async (e) => {
     team2_name: form.team2_name.value.trim(),
     team1_score: parseInt(form.team1_score.value, 10),
     team2_score: parseInt(form.team2_score.value, 10),
-    heap: parseInt(form.heap.value, 10) || 1,
+    heat: parseInt(form.heat.value, 10) || 1,
   };
 
   if (!body.team1_name || !body.team2_name) {
@@ -149,7 +149,7 @@ function renderMatches(matches) {
       <td class="score-cell">${m.team1_score}</td>
       <td class="score-cell">${m.team2_score}</td>
       <td>${escapeHtml(m.team2_name)}</td>
-      <td class="score-cell">${m.heap}</td>
+      <td class="score-cell">${m.heat}</td>
       <td class="date-cell">${formatDate(m.created_at)}</td>
       <td><button class="btn-delete" onclick="deleteMatch('${m.id}')">✕</button></td>
     </tr>`
@@ -245,29 +245,29 @@ async function populateTeamDropdowns() {
 
 document.getElementById("refresh-teams-btn").addEventListener("click", loadTeams);
 
-// ── Heap ─────────────────────────────────────────────────────────────
+// ── Heat ─────────────────────────────────────────────────────────────────
 
-async function loadHeapInfo() {
+async function loadHeatInfo() {
   try {
-    const resp = await fetch(API_BASE_URL + "/heap");
-    if (!resp.ok) throw new Error("Failed to load heap info");
+    const resp = await fetch(API_BASE_URL + "/heat");
+    if (!resp.ok) throw new Error("Failed to load heat info");
     const data = await resp.json();
-    renderHeapInfo(data);
+    renderHeatInfo(data);
   } catch (err) {
-    showError("Could not load heap info: " + err.message);
+    showError("Could not load heat info: " + err.message);
   }
 }
 
-function renderHeapInfo(heapInfo) {
-  document.getElementById("heap-number").textContent = heapInfo.current_heap;
-  const container = document.getElementById("heap-matchups");
+function renderHeatInfo(heatInfo) {
+  document.getElementById("heat-number").textContent = heatInfo.current_heat;
+  const container = document.getElementById("heat-matchups");
 
-  if (!heapInfo.matchups || heapInfo.matchups.length === 0) {
+  if (!heatInfo.matchups || heatInfo.matchups.length === 0) {
     container.innerHTML = '<p class="empty-msg">No matchups available – register more teams</p>';
     return;
   }
 
-  container.innerHTML = heapInfo.matchups
+  container.innerHTML = heatInfo.matchups
     .map(
       (m, idx) => {
         // Underdog (team2, lower pts) goes on the left as Red (starts first)
@@ -310,31 +310,31 @@ function renderHeapInfo(heapInfo) {
     .join("");
 
   // Summary line
-  const total = heapInfo.teams_recorded.length + heapInfo.teams_not_recorded.length;
-  const recorded = heapInfo.teams_recorded.length;
+  const total = heatInfo.teams_recorded.length + heatInfo.teams_not_recorded.length;
+  const recorded = heatInfo.teams_recorded.length;
   container.innerHTML += `
-    <div class="heap-summary">
+    <div class="heat-summary">
       <span>${recorded} / ${total} teams recorded</span>
     </div>`;
 }
 
-async function loadCurrentHeap() {
+async function loadCurrentHeat() {
   try {
-    const resp = await fetch(API_BASE_URL + "/heap");
-    if (!resp.ok) throw new Error("Failed to load heap");
+    const resp = await fetch(API_BASE_URL + "/heat");
+    if (!resp.ok) throw new Error("Failed to load heat");
     const data = await resp.json();
-    document.getElementById("heap").value = data.current_heap;
+    document.getElementById("heat").value = data.current_heat;
   } catch (err) {
     // Silently fall back to 1
-    document.getElementById("heap").value = 1;
+    document.getElementById("heat").value = 1;
   }
 }
 
-document.getElementById("start-next-heap-btn").addEventListener("click", async () => {
-  if (!confirm("Are you sure all teams have registered their results for this heap?")) return;
+document.getElementById("start-next-heat-btn").addEventListener("click", async () => {
+  if (!confirm("Are you sure all teams have registered their results for this heat?")) return;
 
   try {
-    const resp = await fetch(API_BASE_URL + "/heap/start-next", {
+    const resp = await fetch(API_BASE_URL + "/heat/start-next", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
     });
@@ -343,56 +343,56 @@ document.getElementById("start-next-heap-btn").addEventListener("click", async (
       throw new Error(detail.detail || "Server error " + resp.status);
     }
     const data = await resp.json();
-    renderHeapInfo(data);
-    updateAdminHeap(data.current_heap);
+    renderHeatInfo(data);
+    updateAdminHeat(data.current_heat);
   } catch (err) {
-    showError("Could not start next heap: " + err.message);
+    showError("Could not start next heat: " + err.message);
   }
 });
 
-document.getElementById("set-heap-btn").addEventListener("click", async () => {
-  const heapStr = prompt("Enter the heap number to set:");
-  if (!heapStr) return;
-  const heapNum = parseInt(heapStr, 10);
-  if (isNaN(heapNum) || heapNum < 1) {
-    showError("Heap must be a positive number");
+document.getElementById("set-heat-btn").addEventListener("click", async () => {
+  const heatStr = prompt("Enter the heat number to set:");
+  if (!heatStr) return;
+  const heatNum = parseInt(heatStr, 10);
+  if (isNaN(heatNum) || heatNum < 1) {
+    showError("Heat must be a positive number");
     return;
   }
 
   try {
-    const resp = await fetch(API_BASE_URL + "/heap/set", {
+    const resp = await fetch(API_BASE_URL + "/heat/set", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
-      body: JSON.stringify({ heap: heapNum }),
+      body: JSON.stringify({ heat: heatNum }),
     });
     if (!resp.ok) {
       const detail = await resp.json().catch(() => ({}));
       throw new Error(detail.detail || "Server error " + resp.status);
     }
     const data = await resp.json();
-    renderHeapInfo(data);
-    updateAdminHeap(data.current_heap);
+    renderHeatInfo(data);
+    updateAdminHeat(data.current_heat);
   } catch (err) {
-    showError("Could not set heap: " + err.message);
+    showError("Could not set heat: " + err.message);
   }
 });
 
-document.getElementById("refresh-heap-btn").addEventListener("click", loadHeapInfo);
+document.getElementById("refresh-heat-btn").addEventListener("click", loadHeatInfo);
 
 // ── Admin ─────────────────────────────────────────────────────────────
 
 let adminToken = null;
 
-function updateAdminHeap(heapNum) {
-  document.getElementById("admin-heap-number").textContent = heapNum;
+function updateAdminHeat(heatNum) {
+  document.getElementById("admin-heat-number").textContent = heatNum;
 }
 
-async function loadAdminHeapInfo() {
+async function loadAdminHeatInfo() {
   try {
-    const resp = await fetch(API_BASE_URL + "/heap");
+    const resp = await fetch(API_BASE_URL + "/heat");
     if (!resp.ok) return;
     const data = await resp.json();
-    updateAdminHeap(data.current_heap);
+    updateAdminHeat(data.current_heat);
   } catch (err) {
     // ignore
   }
@@ -416,7 +416,8 @@ document.getElementById("admin-login-btn").addEventListener("click", async () =>
     adminToken = pin;
     document.getElementById("admin-login").classList.add("hidden");
     document.getElementById("admin-panel").classList.remove("hidden");
-    loadAdminHeapInfo();
+    loadAdminHeatInfo();
+    loadAdminTeams();
   } catch (err) {
     showError("Could not verify PIN: " + err.message);
   }
@@ -430,7 +431,94 @@ document.getElementById("admin-pin").addEventListener("keydown", (e) => {
   }
 });
 
+// ── Admin: Add Team ───────────────────────────────────────────────────
+
+document.getElementById("add-team-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = document.getElementById("new-team-name").value.trim();
+  const m1 = document.getElementById("new-team-member1").value.trim();
+  const m2 = document.getElementById("new-team-member2").value.trim();
+  const m3 = document.getElementById("new-team-member3").value.trim();
+
+  if (!name || !m1 || !m2) {
+    showError("Team name and at least 2 members are required");
+    return;
+  }
+
+  const members = [m1, m2];
+  if (m3) members.push(m3);
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/teams", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+      body: JSON.stringify({ name, members }),
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      throw new Error(detail.detail || "Server error " + resp.status);
+    }
+    document.getElementById("add-team-form").reset();
+    const msg = document.getElementById("add-team-success");
+    msg.classList.remove("hidden");
+    setTimeout(() => msg.classList.add("hidden"), 3000);
+    loadAdminTeams();
+  } catch (err) {
+    showError("Failed to add team: " + err.message);
+  }
+});
+
+// ── Admin: Manage Teams ───────────────────────────────────────────────
+
+async function loadAdminTeams() {
+  try {
+    const resp = await fetch(API_BASE_URL + "/teams");
+    if (!resp.ok) throw new Error("Failed to load teams");
+    const data = await resp.json();
+    renderAdminTeams(data);
+  } catch (err) {
+    showError("Could not load teams: " + err.message);
+  }
+}
+
+function renderAdminTeams(teams) {
+  const tbody = document.getElementById("admin-teams-body");
+  if (teams.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-msg">No teams yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = teams
+    .map(
+      (t, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${escapeHtml(t.name)}</td>
+      <td>${t.members.map(escapeHtml).join(", ")}</td>
+      <td><button class="btn-delete" onclick="deleteTeam('${t.id}')">✕</button></td>
+    </tr>`
+    )
+    .join("");
+}
+
+async function deleteTeam(teamId) {
+  if (!confirm("Are you sure you want to remove this team?")) return;
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/teams/" + teamId, {
+      method: "DELETE",
+      headers: { "X-Admin-Token": adminToken },
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      throw new Error(detail.detail || "Server error " + resp.status);
+    }
+    loadAdminTeams();
+  } catch (err) {
+    showError("Failed to delete team: " + err.message);
+  }
+}
+
 // Initial load
-loadLeaderboard();
+loadHeatInfo();
 populateTeamDropdowns();
-loadCurrentHeap();
+loadCurrentHeat();

@@ -1,4 +1,4 @@
-"""Tests for the /heap endpoints."""
+"""Tests for the /heat endpoints."""
 
 from fastapi.testclient import TestClient
 
@@ -17,88 +17,88 @@ def _register_team(name: str, members: list[str]) -> None:
     create_team(TeamCreate(name=name, members=members))
 
 
-def test_get_heap_default() -> None:
-    """Default heap should be 1 with no matchups (no teams)."""
-    resp = client.get("/heap")
+def test_get_heat_default() -> None:
+    """Default heat should be 1 with no matchups (no teams)."""
+    resp = client.get("/heat")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["current_heap"] == 1
+    assert data["current_heat"] == 1
     assert data["matchups"] == []
 
 
-def test_get_heap_with_teams() -> None:
+def test_get_heat_with_teams() -> None:
     """With registered teams, matchups should be generated."""
     _register_team("Alpha", ["Alice", "Bob"])
     _register_team("Beta", ["Carol", "Dave"])
     _register_team("Gamma", ["Eve", "Frank"])
     _register_team("Delta", ["Grace", "Heidi"])
 
-    resp = client.get("/heap")
+    resp = client.get("/heat")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["current_heap"] == 1
+    assert data["current_heat"] == 1
     assert len(data["matchups"]) == 2  # 4 teams -> 2 matchups
 
 
-def test_start_next_heap() -> None:
-    """Starting next heap should increment the counter."""
-    resp = client.post("/heap/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
+def test_start_next_heat() -> None:
+    """Starting next heat should increment the counter."""
+    resp = client.post("/heat/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
     assert resp.status_code == 200
     data = resp.json()
-    assert data["current_heap"] == 2
+    assert data["current_heat"] == 2
 
     # Do it again
-    resp = client.post("/heap/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
+    resp = client.post("/heat/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
     assert resp.status_code == 200
     data = resp.json()
-    assert data["current_heap"] == 3
+    assert data["current_heat"] == 3
 
 
-def test_start_next_heap_rejects_bad_token() -> None:
-    """Starting next heap with wrong token should be rejected."""
-    resp = client.post("/heap/start-next", headers={"X-Admin-Token": "wrong"})
+def test_start_next_heat_rejects_bad_token() -> None:
+    """Starting next heat with wrong token should be rejected."""
+    resp = client.post("/heat/start-next", headers={"X-Admin-Token": "wrong"})
     assert resp.status_code == 403
 
 
-def test_set_heap() -> None:
-    """Setting heap to a specific value should work."""
+def test_set_heat() -> None:
+    """Setting heat to a specific value should work."""
     resp = client.post(
-        "/heap/set",
-        json={"heap": 5},
+        "/heat/set",
+        json={"heat": 5},
         headers={"X-Admin-Token": ADMIN_TOKEN},
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["current_heap"] == 5
+    assert data["current_heat"] == 5
 
     # Verify it persisted
-    resp = client.get("/heap")
-    assert resp.json()["current_heap"] == 5
+    resp = client.get("/heat")
+    assert resp.json()["current_heat"] == 5
 
 
-def test_set_heap_rejects_bad_token() -> None:
-    """Setting heap with wrong token should be rejected."""
+def test_set_heat_rejects_bad_token() -> None:
+    """Setting heat with wrong token should be rejected."""
     resp = client.post(
-        "/heap/set",
-        json={"heap": 5},
+        "/heat/set",
+        json={"heat": 5},
         headers={"X-Admin-Token": "wrong"},
     )
     assert resp.status_code == 403
 
 
-def test_set_heap_rejects_invalid_value() -> None:
-    """Setting heap to 0 or negative should be rejected."""
+def test_set_heat_rejects_invalid_value() -> None:
+    """Setting heat to 0 or negative should be rejected."""
     resp = client.post(
-        "/heap/set",
-        json={"heap": 0},
+        "/heat/set",
+        json={"heat": 0},
         headers={"X-Admin-Token": ADMIN_TOKEN},
     )
     assert resp.status_code == 400
 
 
-def test_match_uses_current_heap() -> None:
-    """Matches should be locked to the current heap value."""
-    # Default heap is 1
+def test_match_uses_current_heat() -> None:
+    """Matches should be locked to the current heat value."""
+    # Default heat is 1
     resp = client.post(
         "/matches",
         json={
@@ -109,12 +109,12 @@ def test_match_uses_current_heap() -> None:
         },
     )
     assert resp.status_code == 201
-    assert resp.json()["heap"] == 1
+    assert resp.json()["heat"] == 1
 
-    # Advance to heap 2
-    client.post("/heap/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
+    # Advance to heat 2
+    client.post("/heat/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
 
-    # New match should use heap 2
+    # New match should use heat 2
     resp = client.post(
         "/matches",
         json={
@@ -125,11 +125,11 @@ def test_match_uses_current_heap() -> None:
         },
     )
     assert resp.status_code == 201
-    assert resp.json()["heap"] == 2
+    assert resp.json()["heat"] == 2
 
 
 def test_matchups_sorted_by_score() -> None:
-    """Teams with higher scores should be paired together in the NEXT heap."""
+    """Teams with higher scores should be paired together in the NEXT heat."""
     _register_team("Alpha", ["Alice", "Bob"])
     _register_team("Beta", ["Carol", "Dave"])
     _register_team("Gamma", ["Eve", "Frank"])
@@ -145,10 +145,10 @@ def test_matchups_sorted_by_score() -> None:
         json={"team1_name": "Beta", "team2_name": "Gamma", "team1_score": 5, "team2_score": 1},
     )
 
-    # Advance to heap 2 so matchups are regenerated based on new standings
-    client.post("/heap/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
+    # Advance to heat 2 so matchups are regenerated based on new standings
+    client.post("/heat/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
 
-    resp = client.get("/heap")
+    resp = client.get("/heat")
     data = resp.json()
     matchups = data["matchups"]
     assert len(matchups) == 2
@@ -185,15 +185,15 @@ def test_leaderboard_includes_total_matches() -> None:
         assert entry["total_matches"] == 2  # Both teams played 2 matches
 
 
-def test_heap_shows_recorded_status() -> None:
-    """Heap info should indicate which matchups have recorded scores."""
+def test_heat_shows_recorded_status() -> None:
+    """Heat info should indicate which matchups have recorded scores."""
     _register_team("Alpha", ["Alice", "Bob"])
     _register_team("Beta", ["Carol", "Dave"])
     _register_team("Gamma", ["Eve", "Frank"])
     _register_team("Delta", ["Grace", "Heidi"])
 
     # No matches yet – all matchups should be unrecorded
-    resp = client.get("/heap")
+    resp = client.get("/heat")
     data = resp.json()
     for m in data["matchups"]:
         assert m["recorded"] is False
@@ -203,13 +203,13 @@ def test_heap_shows_recorded_status() -> None:
     assert data["teams_not_recorded"] != []
     assert data["teams_recorded"] == []
 
-    # Record one match for heap 1
+    # Record one match for heat 1
     client.post(
         "/matches",
         json={"team1_name": "Alpha", "team2_name": "Beta", "team1_score": 5, "team2_score": 2},
     )
 
-    resp = client.get("/heap")
+    resp = client.get("/heat")
     data = resp.json()
     recorded_matchup = next(
         m for m in data["matchups"] if {m["team1_name"], m["team2_name"]} == {"Alpha", "Beta"}

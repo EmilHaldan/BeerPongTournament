@@ -36,7 +36,7 @@ _container: ContainerLike | None = None
 # ── Teams container ───────────────────────────────────────────────────
 _teams_container: ContainerLike | None = None
 
-# ── State container (heap tracking, etc.) ─────────────────────────────
+# ── State container (heat tracking, etc.) ─────────────────────────────
 _state_container: ContainerLike | None = None
 
 

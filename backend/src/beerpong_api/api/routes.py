@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Header, HTTPException
 
-from beerpong_api.dal.heat import advance_heat, get_heat_info, set_heat
+from beerpong_api.dal.heat import advance_heat, get_heat_info, set_heat, start_heat_timer
 from beerpong_api.dal.leaderboard import compute_leaderboard
 from beerpong_api.dal.matches import delete_match, insert_match, list_matches, reset_matches
 from beerpong_api.dal.teams import create_team, delete_team, get_team_names, list_teams
@@ -201,3 +201,14 @@ def set_heat_value(
     if heat_number is None or heat_number < 1:
         raise HTTPException(status_code=400, detail="Heat must be a positive integer")
     return set_heat(heat_number)
+
+
+@router.post("/heat/start-timer", response_model=HeatInfo, status_code=200)
+def start_timer(
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> HeatInfo:
+    """Start the heat countdown timer (admin only)."""
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    return start_heat_timer()

@@ -51,8 +51,16 @@
     <!-- Next Heat tab -->
     <section id="tab-nextheat" class="tab-content active">
       <div id="heat-display" class="heat-display">
-        <div class="heat-number-label">Current Heat</div>
-        <div id="heat-number" class="heat-number">1</div>
+        <div class="heat-info-row">
+          <div class="heat-info-block">
+            <div class="heat-number-label">Current Heat</div>
+            <div id="heat-number" class="heat-number">1</div>
+          </div>
+          <div id="heat-timer-block" class="heat-info-block heat-timer-block hidden">
+            <div class="heat-number-label">Time Remaining</div>
+            <div id="heat-timer" class="heat-timer">10:00</div>
+          </div>
+        </div>
       </div>
       <h2 style="text-align:center; margin: 1.5rem 0 1rem;">Matchups</h2>
       <div id="heat-matchups" class="heat-matchups">
@@ -163,6 +171,20 @@
       <div id="admin-panel" class="admin-panel hidden">
         <h2>Admin Panel</h2>
 
+        <!-- Heat Management -->
+        <div class="admin-section">
+          <h3>Heat Management</h3>
+          <div id="admin-heat-display" class="admin-heat-display">
+            <span class="admin-heat-label">Current Heat:</span>
+            <span id="admin-heat-number" class="admin-heat-value">1</span>
+          </div>
+          <div class="admin-actions">
+            <button id="set-heat-btn" class="btn secondary">Set Heat</button>
+            <button id="start-next-heat-btn" class="btn primary">Setup Next Heat</button>
+            <button id="start-heat-timer-btn" class="btn primary">Start Heat Timer</button>
+          </div>
+        </div>
+
         <!-- Add Team -->
         <div class="admin-section">
           <h3>Add Team</h3>
@@ -206,19 +228,6 @@
               </tr>
             </tbody>
           </table>
-        </div>
-
-        <!-- Heat Management -->
-        <div class="admin-section">
-          <h3>Heat Management</h3>
-          <div id="admin-heat-display" class="admin-heat-display">
-            <span class="admin-heat-label">Current Heat:</span>
-            <span id="admin-heat-number" class="admin-heat-value">1</span>
-          </div>
-          <div class="admin-actions">
-            <button id="set-heat-btn" class="btn secondary">Set Heat</button>
-            <button id="start-next-heat-btn" class="btn primary">Start Next Heat</button>
-          </div>
         </div>
       </div>
     </section>

@@ -1,5 +1,70 @@
 /* ── Beer Pong Tournament – Frontend JS ────────────────────────────── */
 
+// Timer state
+let timerInterval = null;
+let buzzerPlayed = false;
+
+// Play a loud buzzer sound using Web Audio API
+function playBuzzer() {
+  if (buzzerPlayed) return;
+  buzzerPlayed = true;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = 220;
+    gain.gain.value = 0.8;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    // Three short buzzes
+    setTimeout(() => { gain.gain.value = 0; }, 300);
+    setTimeout(() => { gain.gain.value = 0.8; }, 500);
+    setTimeout(() => { gain.gain.value = 0; }, 800);
+    setTimeout(() => { gain.gain.value = 0.8; }, 1000);
+    setTimeout(() => { gain.gain.value = 0; osc.stop(); ctx.close(); }, 1300);
+  } catch (e) {
+    console.warn("Buzzer sound not supported", e);
+  }
+}
+
+function updateTimerDisplay(timerStartedAt, timerDuration) {
+  const timerBlock = document.getElementById("heat-timer-block");
+  const timerEl = document.getElementById("heat-timer");
+  if (!timerStartedAt) {
+    timerBlock.classList.add("hidden");
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    buzzerPlayed = false;
+    return;
+  }
+
+  timerBlock.classList.remove("hidden");
+  const startMs = new Date(timerStartedAt).getTime();
+  const endMs = startMs + timerDuration * 1000;
+
+  function tick() {
+    const remaining = Math.max(0, endMs - Date.now());
+    const totalSec = Math.ceil(remaining / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    timerEl.textContent = String(min).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
+
+    if (remaining <= 0) {
+      timerEl.textContent = "00:00";
+      timerEl.classList.add("timer-expired");
+      playBuzzer();
+      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    } else {
+      timerEl.classList.remove("timer-expired");
+    }
+  }
+
+  tick();
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(tick, 250);
+}
+
 // Tab switching
 document.querySelectorAll(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -260,6 +325,10 @@ async function loadHeatInfo() {
 
 function renderHeatInfo(heatInfo) {
   document.getElementById("heat-number").textContent = heatInfo.current_heat;
+
+  // Update timer display
+  updateTimerDisplay(heatInfo.timer_started_at, heatInfo.timer_duration || 600);
+
   const container = document.getElementById("heat-matchups");
 
   if (!heatInfo.matchups || heatInfo.matchups.length === 0) {
@@ -331,7 +400,7 @@ async function loadCurrentHeat() {
 }
 
 document.getElementById("start-next-heat-btn").addEventListener("click", async () => {
-  if (!confirm("Are you sure all teams have registered their results for this heat?")) return;
+  if (!confirm("This will setup the next heat (advance heat number and generate new matchups). Continue?")) return;
 
   try {
     const resp = await fetch(API_BASE_URL + "/heat/start-next", {
@@ -346,7 +415,27 @@ document.getElementById("start-next-heat-btn").addEventListener("click", async (
     renderHeatInfo(data);
     updateAdminHeat(data.current_heat);
   } catch (err) {
-    showError("Could not start next heat: " + err.message);
+    showError("Could not setup next heat: " + err.message);
+  }
+});
+
+document.getElementById("start-heat-timer-btn").addEventListener("click", async () => {
+  if (!confirm("Start the heat timer? The countdown will be visible to all players.")) return;
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/heat/start-timer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      throw new Error(detail.detail || "Server error " + resp.status);
+    }
+    const data = await resp.json();
+    renderHeatInfo(data);
+    updateAdminHeat(data.current_heat);
+  } catch (err) {
+    showError("Could not start heat timer: " + err.message);
   }
 });
 

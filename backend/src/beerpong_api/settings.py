@@ -31,6 +31,7 @@ class Settings:
         cors_raw = os.environ.get("CORS_ORIGINS", "*")
         self.CORS_ORIGINS = [o.strip() for o in cors_raw.split(",")]
         self.TEAMS_CSV_PATH = os.environ.get("TEAMS_CSV_PATH", "teams.csv")
+        self.HEAT_TIMER = int(os.environ.get("HEAT_TIMER", "600"))
 
     @property
     def is_cosmos_configured(self) -> bool:

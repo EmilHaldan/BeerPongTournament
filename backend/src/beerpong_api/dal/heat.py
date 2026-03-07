@@ -6,11 +6,14 @@ based on team standings (total score acts as ELO).
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from beerpong_api.dal.leaderboard import compute_leaderboard
 from beerpong_api.dal.matches import list_matches
 from beerpong_api.dal.teams import get_team_names
 from beerpong_api.db.client import get_state_container
 from beerpong_api.db.models import HeatInfo, HeatMatchup, HeatState
+from beerpong_api.settings import get_settings
 
 
 def _get_heat_state() -> HeatState:
@@ -210,6 +213,8 @@ def get_heat_info() -> HeatInfo:
         matchups=enriched,
         teams_recorded=sorted(teams_recorded),
         teams_not_recorded=sorted(teams_not_recorded),
+        timer_duration=get_settings().HEAT_TIMER,
+        timer_started_at=state.heat_timer_started_at,
     )
 
 
@@ -218,6 +223,7 @@ def advance_heat() -> HeatInfo:
     state = _get_heat_state()
     state.current_heat += 1
     state.stored_matchups = generate_matchups()
+    state.heat_timer_started_at = None
     _save_heat_state(state)
     return get_heat_info()
 
@@ -227,5 +233,14 @@ def set_heat(heat_number: int) -> HeatInfo:
     state = _get_heat_state()
     state.current_heat = heat_number
     state.stored_matchups = generate_matchups()
+    state.heat_timer_started_at = None
+    _save_heat_state(state)
+    return get_heat_info()
+
+
+def start_heat_timer() -> HeatInfo:
+    """Record the current timestamp as the heat timer start and return heat info."""
+    state = _get_heat_state()
+    state.heat_timer_started_at = datetime.now(UTC).isoformat()
     _save_heat_state(state)
     return get_heat_info()

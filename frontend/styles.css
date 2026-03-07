@@ -294,6 +294,17 @@ tbody tr:hover {
   border: 1px solid var(--surface2);
 }
 
+.heat-info-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 3rem;
+}
+
+.heat-info-block {
+  text-align: center;
+}
+
 .heat-number-label {
   font-size: 1.2rem;
   color: var(--text-muted);
@@ -308,6 +319,31 @@ tbody tr:hover {
   color: var(--accent);
   line-height: 1;
   text-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
+}
+
+.heat-timer {
+  font-size: 6rem;
+  font-weight: 900;
+  color: var(--success);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 20px rgba(46, 204, 113, 0.3);
+  transition: color 0.3s;
+}
+
+.heat-timer.timer-expired {
+  color: var(--error);
+  text-shadow: 0 0 30px rgba(231, 76, 60, 0.6);
+  animation: timer-pulse 0.5s infinite alternate;
+}
+
+@keyframes timer-pulse {
+  from { opacity: 1; }
+  to { opacity: 0.4; }
+}
+
+.heat-timer-block.hidden {
+  display: none;
 }
 
 .heat-matchups {
@@ -433,6 +469,15 @@ tbody tr:hover {
 @media (max-width: 500px) {
   .heat-number {
     font-size: 4rem;
+  }
+
+  .heat-timer {
+    font-size: 3rem;
+  }
+
+  .heat-info-row {
+    flex-direction: column;
+    gap: 1.5rem;
   }
 
   .matchup-card {

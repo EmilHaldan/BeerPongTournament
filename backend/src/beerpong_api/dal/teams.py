@@ -33,7 +33,7 @@ def list_teams() -> list[Team]:
     container = get_teams_container()
     query = "SELECT * FROM c WHERE c.tournamentId = 'default'"
     items = container.query_items(query=query, enable_cross_partition_query=False)
-    return [Team(**item) for item in items]  # pyright: ignore[reportUnknownArgumentType]
+    return [Team(**item) for item in items]  # type: ignore[reportUnknownArgumentType]
 
 
 def get_team_names() -> list[str]:

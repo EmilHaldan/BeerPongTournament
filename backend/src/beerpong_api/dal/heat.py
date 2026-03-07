@@ -6,14 +6,16 @@ based on team standings (total score acts as ELO).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from beerpong_api.dal.leaderboard import compute_leaderboard
+
+# Heat timer duration in seconds (10 minutes)
+HEAT_TIMER_SECONDS = 600
 from beerpong_api.dal.matches import list_matches
 from beerpong_api.dal.teams import get_team_names
 from beerpong_api.db.client import get_state_container
 from beerpong_api.db.models import HeatInfo, HeatMatchup, HeatState
-from beerpong_api.settings import get_settings
 
 
 def _get_heat_state() -> HeatState:
@@ -213,7 +215,7 @@ def get_heat_info() -> HeatInfo:
         matchups=enriched,
         teams_recorded=sorted(teams_recorded),
         teams_not_recorded=sorted(teams_not_recorded),
-        timer_duration=get_settings().HEAT_TIMER,
+        timer_duration=HEAT_TIMER_SECONDS,
         timer_started_at=state.heat_timer_started_at,
     )
 
@@ -240,8 +242,6 @@ def set_heat(heat_number: int) -> HeatInfo:
 
 def start_heat_timer() -> HeatInfo:
     """Record a timer start 6 seconds in the future (for 5-count countdown) and return heat info."""
-    from datetime import timedelta
-
     state = _get_heat_state()
     state.heat_timer_started_at = (datetime.now(UTC) + timedelta(seconds=6)).isoformat()
     _save_heat_state(state)

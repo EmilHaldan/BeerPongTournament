@@ -210,7 +210,7 @@ resource "azurerm_container_app" "backend" {
 
 resource "azurerm_static_web_app" "frontend" {
   name                = "${local.prefix}-swa-${random_string.suffix.result}"
-  location            = azurerm_resource_group.main.location
+  location            = "westeurope"
   resource_group_name = azurerm_resource_group.main.name
   sku_tier            = "Free"
   sku_size            = "Free"

@@ -3,13 +3,86 @@
 // Timer state
 let timerInterval = null;
 let buzzerPlayed = false;
+let bellPlayed = false;
+let countdownSoundsPlayed = new Set(); // track which countdown numbers already played
+let lastTimerStartedAt = null; // Track timer state to detect new timer starts
+let heatPollInterval = null;
+
+// Shared AudioContext – unlocked on first user interaction
+let sharedAudioCtx = null;
+function getAudioCtx() {
+  if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {
+    sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (sharedAudioCtx.state === "suspended") {
+    sharedAudioCtx.resume();
+  }
+  return sharedAudioCtx;
+}
+
+// Unlock audio on first user interaction (tap/click anywhere)
+document.addEventListener("click", function unlockAudio() {
+  getAudioCtx();
+  document.removeEventListener("click", unlockAudio);
+}, { once: true });
+
+// Play a countdown beep (constant 900Hz tone)
+function playCountdownBeep(number) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 900;
+    gain.gain.value = 0;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.7, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+    osc.start(t);
+    osc.stop(t + 0.45);
+  } catch (e) {
+    console.warn("Countdown beep not supported", e);
+  }
+}
+
+// Play a boxing ring bell – 4 consecutive "ding" sounds
+function playBell() {
+  try {
+    const ctx = getAudioCtx();
+    const dingCount = 4;
+    const dingSpacing = 0.3; // seconds between dings
+
+    for (let i = 0; i < dingCount; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 1200; // high metallic bell tone
+      gain.gain.value = 0;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      const t = ctx.currentTime + i * dingSpacing;
+      // Sharp attack, quick decay like a struck bell
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.9, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+      osc.start(t);
+      osc.stop(t + 0.25);
+    }
+  } catch (e) {
+    console.warn("Bell sound not supported", e);
+  }
+}
 
 // Play a loud buzzer sound using Web Audio API
 function playBuzzer() {
   if (buzzerPlayed) return;
   buzzerPlayed = true;
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = getAudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = "square";
@@ -23,7 +96,7 @@ function playBuzzer() {
     setTimeout(() => { gain.gain.value = 0.8; }, 500);
     setTimeout(() => { gain.gain.value = 0; }, 800);
     setTimeout(() => { gain.gain.value = 0.8; }, 1000);
-    setTimeout(() => { gain.gain.value = 0; osc.stop(); ctx.close(); }, 1300);
+    setTimeout(() => { gain.gain.value = 0; osc.stop(); }, 1300);
   } catch (e) {
     console.warn("Buzzer sound not supported", e);
   }
@@ -32,10 +105,13 @@ function playBuzzer() {
 function updateTimerDisplay(timerStartedAt, timerDuration) {
   const timerBlock = document.getElementById("heat-timer-block");
   const timerEl = document.getElementById("heat-timer");
+  const timerLabel = timerBlock.querySelector(".heat-number-label");
   if (!timerStartedAt) {
     timerBlock.classList.add("hidden");
     if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
     buzzerPlayed = false;
+    bellPlayed = false;
+    countdownSoundsPlayed.clear();
     return;
   }
 
@@ -44,7 +120,35 @@ function updateTimerDisplay(timerStartedAt, timerDuration) {
   const endMs = startMs + timerDuration * 1000;
 
   function tick() {
-    const remaining = Math.max(0, endMs - Date.now());
+    const now = Date.now();
+    const preStartRemaining = startMs - now;
+
+    if (preStartRemaining > 0) {
+      // ── Pre-start countdown phase (5, 4, 3, 2, 1) ──
+      const countNum = Math.ceil(preStartRemaining / 1200);
+      timerLabel.textContent = "Get Ready!";
+      timerEl.textContent = countNum;
+      timerEl.classList.remove("timer-expired");
+      timerEl.classList.add("timer-countdown");
+
+      // Play escalating beep for each number (once)
+      if (!countdownSoundsPlayed.has(countNum)) {
+        countdownSoundsPlayed.add(countNum);
+        playCountdownBeep(countNum);
+      }
+      return;
+    }
+
+    // ── Timer just started – play bell once ──
+    if (!bellPlayed) {
+      bellPlayed = true;
+      timerEl.classList.remove("timer-countdown");
+      timerLabel.textContent = "Time Remaining";
+      playBell();
+    }
+
+    // ── Normal countdown phase ──
+    const remaining = Math.max(0, endMs - now);
     const totalSec = Math.ceil(remaining / 1000);
     const min = Math.floor(totalSec / 60);
     const sec = totalSec % 60;
@@ -62,7 +166,7 @@ function updateTimerDisplay(timerStartedAt, timerDuration) {
 
   tick();
   if (timerInterval) clearInterval(timerInterval);
-  timerInterval = setInterval(tick, 250);
+  timerInterval = setInterval(tick, 100);
 }
 
 // Tab switching
@@ -77,7 +181,8 @@ document.querySelectorAll(".tab").forEach((btn) => {
     if (btn.dataset.tab === "scoreboard") loadLeaderboard();
     if (btn.dataset.tab === "matches") loadMatches();
     if (btn.dataset.tab === "teams") loadTeams();
-    if (btn.dataset.tab === "nextheat") loadHeatInfo();
+    if (btn.dataset.tab === "nextheat") startHeatPolling();
+    else stopHeatPolling();
     if (btn.dataset.tab === "admin") loadAdminHeatInfo();
     if (btn.dataset.tab === "register") {
       populateTeamDropdowns();
@@ -317,10 +422,24 @@ async function loadHeatInfo() {
     const resp = await fetch(API_BASE_URL + "/heat");
     if (!resp.ok) throw new Error("Failed to load heat info");
     const data = await resp.json();
+
+    // Detect when a timer just started (track for state change)
+    lastTimerStartedAt = data.timer_started_at || null;
+
     renderHeatInfo(data);
   } catch (err) {
     showError("Could not load heat info: " + err.message);
   }
+}
+
+function startHeatPolling() {
+  loadHeatInfo();
+  stopHeatPolling();
+  heatPollInterval = setInterval(loadHeatInfo, 1000);
+}
+
+function stopHeatPolling() {
+  if (heatPollInterval) { clearInterval(heatPollInterval); heatPollInterval = null; }
 }
 
 function renderHeatInfo(heatInfo) {
@@ -421,6 +540,9 @@ document.getElementById("start-next-heat-btn").addEventListener("click", async (
 
 document.getElementById("start-heat-timer-btn").addEventListener("click", async () => {
   if (!confirm("Start the heat timer? The countdown will be visible to all players.")) return;
+
+  // Unlock audio context within user gesture
+  getAudioCtx();
 
   try {
     const resp = await fetch(API_BASE_URL + "/heat/start-timer", {
@@ -608,6 +730,6 @@ async function deleteTeam(teamId) {
 }
 
 // Initial load
-loadHeatInfo();
+startHeatPolling();
 populateTeamDropdowns();
 loadCurrentHeat();

@@ -337,6 +337,18 @@ tbody tr:hover {
   animation: timer-pulse 0.5s infinite alternate;
 }
 
+.heat-timer.timer-countdown {
+  font-size: 6rem;
+  color: var(--accent);
+  text-shadow: 0 0 30px rgba(233, 69, 96, 0.5);
+  animation: countdown-pop 0.3s ease-out;
+}
+
+@keyframes countdown-pop {
+  0% { transform: scale(1.4); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 @keyframes timer-pulse {
   from { opacity: 1; }
   to { opacity: 0.4; }

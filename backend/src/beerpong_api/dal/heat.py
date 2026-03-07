@@ -239,8 +239,10 @@ def set_heat(heat_number: int) -> HeatInfo:
 
 
 def start_heat_timer() -> HeatInfo:
-    """Record the current timestamp as the heat timer start and return heat info."""
+    """Record a timer start 6 seconds in the future (for 5-count countdown) and return heat info."""
+    from datetime import timedelta
+
     state = _get_heat_state()
-    state.heat_timer_started_at = datetime.now(UTC).isoformat()
+    state.heat_timer_started_at = (datetime.now(UTC) + timedelta(seconds=6)).isoformat()
     _save_heat_state(state)
     return get_heat_info()

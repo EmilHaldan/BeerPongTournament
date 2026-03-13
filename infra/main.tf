@@ -120,6 +120,15 @@ resource "azurerm_container_app_environment" "env" {
   tags = azurerm_resource_group.main.tags
 }
 
+# ── Managed Identity (for ACR pull) ──────────────────────────────────
+
+resource "azurerm_user_assigned_identity" "backend" {
+  name                = "${local.prefix}-api-id-${random_string.suffix.result}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = azurerm_resource_group.main.tags
+}
+
 # ── Container App (Backend API) ───────────────────────────────────────
 
 resource "azurerm_container_app" "backend" {
@@ -188,11 +197,12 @@ resource "azurerm_container_app" "backend" {
 
   registry {
     server   = azurerm_container_registry.acr.login_server
-    identity = "System"
+    identity = azurerm_user_assigned_identity.backend.id
   }
 
   identity {
-    type = "SystemAssigned"
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.backend.id]
   }
 
   tags = azurerm_resource_group.main.tags
@@ -209,7 +219,7 @@ resource "azurerm_container_app" "backend" {
 resource "azurerm_role_assignment" "acr_pull" {
   scope                = azurerm_container_registry.acr.id
   role_definition_name = "AcrPull"
-  principal_id         = azurerm_container_app.backend.identity[0].principal_id
+  principal_id         = azurerm_user_assigned_identity.backend.principal_id
 }
 
 # ── Static Web App (Frontend) ────────────────────────────────────────

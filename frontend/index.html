@@ -108,7 +108,15 @@
           </div>
           <div class="form-group">
             <label for="team1_score">Cups Hit</label>
-            <input type="number" id="team1_score" name="team1_score" required min="0" max="6" value="0" />
+            <select id="team1_score" name="team1_score" required>
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
           </div>
         </div>
         <div class="versus">VS</div>
@@ -121,7 +129,15 @@
           </div>
           <div class="form-group">
             <label for="team2_score">Cups Hit</label>
-            <input type="number" id="team2_score" name="team2_score" required min="0" max="6" value="0" />
+            <select id="team2_score" name="team2_score" required>
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
           </div>
         </div>
         <div class="form-row">
@@ -229,26 +245,46 @@
             </tbody>
           </table>
         </div>
+
+        <!-- Timer Settings -->
+        <div class="admin-section">
+          <h3>Timer Settings</h3>
+          <div class="form-group">
+            <label for="timer-duration">Match Duration (minutes)</label>
+            <select id="timer-duration">
+              <option value="300">5</option>
+              <option value="420">7</option>
+              <option value="480">8</option>
+              <option value="600" selected>10</option>
+              <option value="720">12</option>
+              <option value="900">15</option>
+            </select>
+          </div>
+          <button id="save-timer-btn" class="btn primary">Save Timer Duration</button>
+        </div>
       </div>
     </section>
 
     <!-- Score animation overlay -->
     <div id="score-animation-overlay" class="score-animation hidden">
       <div class="score-anim-content">
-        <div class="score-anim-team">
+        <div class="score-anim-team" id="anim-team1-side">
           <div class="score-anim-name" id="anim-team1-name"></div>
           <div class="score-anim-cups" id="anim-team1-cups"></div>
           <div class="score-anim-adj" id="anim-team1-adj"></div>
-          <div class="score-anim-total" id="anim-team1-total"></div>
         </div>
         <div class="score-anim-vs">VS</div>
-        <div class="score-anim-team">
+        <div class="score-anim-team" id="anim-team2-side">
           <div class="score-anim-name" id="anim-team2-name"></div>
           <div class="score-anim-cups" id="anim-team2-cups"></div>
           <div class="score-anim-adj" id="anim-team2-adj"></div>
-          <div class="score-anim-total" id="anim-team2-total"></div>
         </div>
       </div>
+      <div class="score-anim-winner hidden" id="anim-winner-section">
+        <div class="score-anim-winner-name" id="anim-winner-name"></div>
+        <div class="score-anim-winner-score" id="anim-winner-score">0</div>
+      </div>
+      <canvas id="confetti-canvas"></canvas>
     </div>
   </main>
 

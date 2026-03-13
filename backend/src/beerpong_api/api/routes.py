@@ -7,7 +7,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Header, HTTPException
 
-from beerpong_api.dal.heat import advance_heat, get_heat_info, set_heat, start_heat_timer
+from beerpong_api.dal.heat import (
+    advance_heat,
+    get_heat_info,
+    set_heat,
+    set_timer_duration,
+    start_heat_timer,
+)
 from beerpong_api.dal.leaderboard import compute_leaderboard
 from beerpong_api.dal.matches import delete_match, insert_match, list_matches, reset_matches
 from beerpong_api.dal.teams import create_team, delete_team, get_team_names, list_teams
@@ -212,3 +218,18 @@ def start_timer(
     if x_admin_token != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid admin token")
     return start_heat_timer()
+
+
+@router.post("/heat/timer-duration", response_model=HeatInfo, status_code=200)
+def set_timer_duration_route(
+    payload: dict[str, int],
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> HeatInfo:
+    """Set the heat timer duration in seconds (admin only)."""
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    seconds = payload.get("seconds")
+    if seconds is None or seconds < 60:
+        raise HTTPException(status_code=400, detail="Duration must be at least 60 seconds")
+    return set_timer_duration(seconds)

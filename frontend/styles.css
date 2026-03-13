@@ -267,7 +267,11 @@ tbody tr:hover {
 
   main {
     padding: 0 0.5rem;
-    margin-top: 1rem;
+    margin-top: 0.75rem;
+  }
+
+  .heat-matchups {
+    gap: 0.7rem;
   }
 
   .form-row {
@@ -510,6 +514,10 @@ tbody tr:hover {
 }
 
 @media (max-width: 500px) {
+  .heat-display {
+    padding: 1.4rem 1rem;
+  }
+
   .heat-number {
     font-size: 4rem;
   }
@@ -518,18 +526,35 @@ tbody tr:hover {
     font-size: 3rem;
   }
 
+  .heat-timer.timer-countdown {
+    font-size: 3rem;
+  }
+
   .heat-info-row {
-    flex-direction: column;
+    flex-direction: row;
     gap: 1.5rem;
   }
 
   .matchup-card {
-    flex-direction: column;
-    gap: 0.5rem;
+    flex-direction: row;
+    gap: 0.75rem;
+    padding: 0.8rem 1rem;
   }
 
   .matchup-name {
-    font-size: 1.1rem;
+    font-size: 1rem;
+  }
+
+  .matchup-pts {
+    font-size: 0.8rem;
+  }
+
+  .matchup-vs {
+    font-size: 1.2rem;
+  }
+
+  .matchup-table {
+    font-size: 0.75rem;
   }
 
   .heat-actions {
@@ -640,6 +665,16 @@ tbody tr:hover {
 }
 
 @media (max-width: 500px) {
+  .admin-section {
+    padding: 1rem;
+  }
+
+  .admin-section .form-group input,
+  .admin-section .form-group select {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.85rem;
+  }
+
   .admin-actions {
     flex-direction: column;
     align-items: center;
@@ -659,6 +694,7 @@ tbody tr:hover {
   background: rgba(26, 26, 46, 0.96);
   z-index: 1000;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   animation: overlay-fade-in 0.3s ease-out;
@@ -702,7 +738,7 @@ tbody tr:hover {
   color: var(--text);
   margin-bottom: 1rem;
   opacity: 0;
-  animation: anim-pop-in 0.4s ease-out 0.1s forwards;
+  animation: anim-pop-in 0.6s ease-out 0.15s forwards;
 }
 
 .score-anim-cups {
@@ -710,7 +746,7 @@ tbody tr:hover {
   font-weight: 900;
   color: var(--text);
   opacity: 0;
-  animation: anim-pop-in 0.5s ease-out 0.3s forwards;
+  animation: anim-pop-in 0.75s ease-out 0.45s forwards;
 }
 
 .score-anim-adj {
@@ -718,7 +754,7 @@ tbody tr:hover {
   font-weight: 700;
   margin: 0.5rem 0;
   opacity: 0;
-  animation: anim-slide-in 0.4s ease-out 0.9s forwards;
+  animation: anim-slide-in 0.6s ease-out 1.35s forwards;
 }
 
 .score-anim-adj.win {
@@ -733,24 +769,6 @@ tbody tr:hover {
   color: var(--text-muted);
 }
 
-.score-anim-total {
-  font-size: 4rem;
-  font-weight: 900;
-  opacity: 0;
-  animation: anim-bounce-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 1.5s forwards;
-}
-
-.score-anim-total.win {
-  color: var(--success);
-}
-
-.score-anim-total.loss {
-  color: var(--error);
-}
-
-.score-anim-total.tie {
-  color: var(--text-muted);
-}
 
 .score-anim-vs {
   font-weight: 900;
@@ -758,7 +776,7 @@ tbody tr:hover {
   color: var(--accent);
   flex-shrink: 0;
   opacity: 0;
-  animation: anim-pop-in 0.3s ease-out 0.1s forwards;
+  animation: anim-pop-in 0.45s ease-out 0.15s forwards;
 }
 
 @keyframes anim-pop-in {
@@ -777,4 +795,49 @@ tbody tr:hover {
   70% { transform: scale(0.92); }
   85% { transform: scale(1.05); }
   100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes anim-fade-out-side {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.8); }
+}
+
+.score-anim-team.fade-out-loser {
+  animation: anim-fade-out-side 0.6s ease-in forwards;
+}
+
+.score-anim-winner {
+  text-align: center;
+  opacity: 0;
+  animation: anim-pop-in 0.6s ease-out forwards;
+}
+
+.score-anim-winner.hidden {
+  display: none;
+}
+
+.score-anim-winner-name {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--success);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.score-anim-winner-score {
+  font-size: 5rem;
+  font-weight: 900;
+  color: var(--success);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+#confetti-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1001;
 }

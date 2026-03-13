@@ -246,6 +246,63 @@ function escapeHtml(text) {
   return d.innerHTML;
 }
 
+// ── Score Animation ──────────────────────────────────────────────────
+
+function showScoreAnimation(t1Name, t1Cups, t2Name, t2Cups) {
+  const overlay = document.getElementById("score-animation-overlay");
+
+  let t1Adj = 0, t2Adj = 0;
+  if (t1Cups > t2Cups) { t1Adj = 1; t2Adj = -1; }
+  else if (t2Cups > t1Cups) { t2Adj = 1; t1Adj = -1; }
+
+  function adjLabel(adj) {
+    if (adj > 0) return "+1";
+    if (adj < 0) return "-1";
+    return "\u00B10";
+  }
+
+  function adjClass(adj) {
+    if (adj > 0) return "score-anim-adj win";
+    if (adj < 0) return "score-anim-adj loss";
+    return "score-anim-adj tie";
+  }
+
+  function totalClass(adj) {
+    if (adj > 0) return "score-anim-total win";
+    if (adj < 0) return "score-anim-total loss";
+    return "score-anim-total tie";
+  }
+
+  document.getElementById("anim-team1-name").textContent = t1Name;
+  document.getElementById("anim-team1-cups").textContent = t1Cups;
+  document.getElementById("anim-team1-adj").textContent = adjLabel(t1Adj);
+  document.getElementById("anim-team1-adj").className = adjClass(t1Adj);
+  document.getElementById("anim-team1-total").textContent = t1Cups + t1Adj;
+  document.getElementById("anim-team1-total").className = totalClass(t1Adj);
+
+  document.getElementById("anim-team2-name").textContent = t2Name;
+  document.getElementById("anim-team2-cups").textContent = t2Cups;
+  document.getElementById("anim-team2-adj").textContent = adjLabel(t2Adj);
+  document.getElementById("anim-team2-adj").className = adjClass(t2Adj);
+  document.getElementById("anim-team2-total").textContent = t2Cups + t2Adj;
+  document.getElementById("anim-team2-total").className = totalClass(t2Adj);
+
+  // Reset animations by re-inserting the content
+  overlay.classList.remove("hidden", "fade-out");
+  const content = overlay.querySelector(".score-anim-content");
+  const clone = content.cloneNode(true);
+  content.replaceWith(clone);
+
+  setTimeout(() => {
+    overlay.classList.add("fade-out");
+    setTimeout(() => {
+      overlay.classList.add("hidden");
+      overlay.classList.remove("fade-out");
+      document.querySelector('[data-tab="scoreboard"]').click();
+    }, 400);
+  }, 3500);
+}
+
 // ── Register match ───────────────────────────────────────────────────
 
 document.getElementById("match-form").addEventListener("submit", async (e) => {
@@ -279,11 +336,7 @@ document.getElementById("match-form").addEventListener("submit", async (e) => {
       throw new Error(detail.detail || "Server error " + resp.status);
     }
     form.reset();
-    showSuccess();
-    // Switch to scoreboard after a short delay
-    setTimeout(() => {
-      document.querySelector('[data-tab="scoreboard"]').click();
-    }, 1200);
+    showScoreAnimation(body.team1_name, body.team1_score, body.team2_name, body.team2_score);
   } catch (err) {
     showError("Failed to submit: " + err.message);
   }

@@ -128,40 +128,40 @@ def test_match_uses_current_heat() -> None:
     assert resp.json()["heat"] == 2
 
 
-def test_matchups_sorted_by_score() -> None:
-    """Teams with higher scores should be paired together in the NEXT heat."""
+def test_round_robin_covers_all_pairs() -> None:
+    """In cycle 1, round-robin should ensure every pair plays exactly once."""
     _register_team("Alpha", ["Alice", "Bob"])
     _register_team("Beta", ["Carol", "Dave"])
     _register_team("Gamma", ["Eve", "Frank"])
     _register_team("Delta", ["Grace", "Heidi"])
 
-    # Record some matches so teams have different scores
-    client.post(
-        "/matches",
-        json={"team1_name": "Alpha", "team2_name": "Delta", "team1_score": 6, "team2_score": 0},
-    )
-    client.post(
-        "/matches",
-        json={"team1_name": "Beta", "team2_name": "Gamma", "team1_score": 5, "team2_score": 1},
-    )
+    all_pairs_played: set[tuple[str, str]] = set()
 
-    # Advance to heat 2 so matchups are regenerated based on new standings
-    client.post("/heat/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
+    # Play through 3 heats (N-1 = 3 for 4 teams)
+    for heat_num in range(3):
+        resp = client.get("/heat")
+        data = resp.json()
+        matchups = data["matchups"]
+        assert len(matchups) == 2, f"Heat {heat_num + 1}: expected 2 matchups"
 
-    resp = client.get("/heat")
-    data = resp.json()
-    matchups = data["matchups"]
-    assert len(matchups) == 2
+        # Record every matchup
+        for m in matchups:
+            t1, t2 = m["team1_name"], m["team2_name"]
+            pair = tuple(sorted([t1, t2]))
+            assert pair not in all_pairs_played, f"Pair {pair} already played"
+            all_pairs_played.add(pair)  # pyright: ignore[reportArgumentType]
 
-    # First matchup should be the top two teams (Alpha=6, Beta=5)
-    first = matchups[0]
-    assert first["team1_name"] == "Alpha"
-    assert first["team2_name"] == "Beta"
+            client.post(
+                "/matches",
+                json={"team1_name": t1, "team2_name": t2, "team1_score": 3, "team2_score": 2},
+            )
 
-    # Second matchup should be the bottom two teams (Gamma=1, Delta=0)
-    second = matchups[1]
-    assert second["team1_name"] == "Gamma"
-    assert second["team2_name"] == "Delta"
+        # Advance to next heat
+        if heat_num < 2:
+            client.post("/heat/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
+
+    # All 6 possible pairs should have been played
+    assert len(all_pairs_played) == 6
 
 
 def test_leaderboard_includes_total_matches() -> None:
@@ -192,9 +192,10 @@ def test_heat_shows_recorded_status() -> None:
     _register_team("Gamma", ["Eve", "Frank"])
     _register_team("Delta", ["Grace", "Heidi"])
 
-    # No matches yet – all matchups should be unrecorded
+    # No matches yet — all matchups should be unrecorded
     resp = client.get("/heat")
     data = resp.json()
+    assert len(data["matchups"]) == 2
     for m in data["matchups"]:
         assert m["recorded"] is False
         assert m["winner"] is None
@@ -203,28 +204,30 @@ def test_heat_shows_recorded_status() -> None:
     assert data["teams_not_recorded"] != []
     assert data["teams_recorded"] == []
 
-    # Record one match for heat 1
+    # Record one of the generated matchups (whichever the round-robin produced)
+    first_matchup = data["matchups"][0]
+    t1, t2 = first_matchup["team1_name"], first_matchup["team2_name"]
     client.post(
         "/matches",
-        json={"team1_name": "Alpha", "team2_name": "Beta", "team1_score": 5, "team2_score": 2},
+        json={"team1_name": t1, "team2_name": t2, "team1_score": 5, "team2_score": 2},
     )
 
     resp = client.get("/heat")
     data = resp.json()
     recorded_matchup = next(
-        m for m in data["matchups"] if {m["team1_name"], m["team2_name"]} == {"Alpha", "Beta"}
+        m for m in data["matchups"] if {m["team1_name"], m["team2_name"]} == {t1, t2}
     )
     assert recorded_matchup["recorded"] is True
-    assert recorded_matchup["winner"] == "Alpha"
+    assert recorded_matchup["winner"] == t1  # t1 scored 5 > 2
     assert recorded_matchup["team1_score"] is not None
     assert recorded_matchup["team2_score"] is not None
 
     pending_matchup = next(
-        m for m in data["matchups"] if {m["team1_name"], m["team2_name"]} != {"Alpha", "Beta"}
+        m for m in data["matchups"] if {m["team1_name"], m["team2_name"]} != {t1, t2}
     )
     assert pending_matchup["recorded"] is False
     assert pending_matchup["winner"] is None
 
-    assert "Alpha" in data["teams_recorded"]
-    assert "Beta" in data["teams_recorded"]
+    assert t1 in data["teams_recorded"]
+    assert t2 in data["teams_recorded"]
     assert len(data["teams_not_recorded"]) == 2

@@ -34,17 +34,17 @@ def test_leaderboard_single_match() -> None:
     data = resp.json()
     assert len(data) == 2
 
-    # Alpha won
+    # Alpha won: 6 cups + 1 bonus = 7
     alpha = next(e for e in data if e["team_name"] == "Alpha")
     assert alpha["total_wins"] == 1
     assert alpha["total_loss"] == 0
-    assert alpha["total_score"] == 6
+    assert alpha["total_score"] == 7
 
-    # Beta lost
+    # Beta lost: 4 cups - 1 penalty = 3
     beta = next(e for e in data if e["team_name"] == "Beta")
     assert beta["total_wins"] == 0
     assert beta["total_loss"] == 1
-    assert beta["total_score"] == 4
+    assert beta["total_score"] == 3
 
 
 def test_leaderboard_tie_counts_as_neither() -> None:

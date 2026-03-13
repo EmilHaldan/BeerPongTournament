@@ -1,11 +1,13 @@
 """DAL functions for heat management.
 
-Handles tracking the current heat number and generating matchups
-based on team standings (total score acts as ELO).
+Handles tracking the current heat number and generating matchups.
+Phase 1 (cycle 1): round-robin via circle method so every team plays every other.
+Phase 2+ (cycle 2+): score-seeded round-robin for competitive matchmaking.
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from beerpong_api.dal.leaderboard import compute_leaderboard
@@ -43,46 +45,155 @@ def get_current_heat() -> int:
     return _get_heat_state().current_heat
 
 
-def generate_matchups() -> list[HeatMatchup]:
-    """Generate matchups for the next round.
+_BYE = "__BYE__"
 
-    Teams are sorted by total score (descending) and paired adjacently:
-    1st vs 2nd, 3rd vs 4th, etc.  If there is an odd number of teams,
-    the last team gets no matchup (a bye).
+
+def _circle_method_round(teams: list[str], round_index: int) -> list[tuple[str, str]]:
+    """Generate pairings for one round using the circle (polygon) method.
+
+    Fix teams[0] in place, rotate the rest by round_index positions,
+    then pair outside-in.  Returns pairs as (team_a, team_b) tuples.
+    """
+    n = len(teams)
+    if n < 2:
+        return []
+
+    fixed = teams[0]
+    rotating = teams[1:]
+    # Rotate left by round_index positions
+    r = round_index % len(rotating)
+    rotated = rotating[r:] + rotating[:r]
+
+    ordered = [fixed] + rotated
+    pairs: list[tuple[str, str]] = []
+    for i in range(n // 2):
+        pairs.append((ordered[i], ordered[n - 1 - i]))
+    return pairs
+
+
+def _compute_round_robin_state(
+    team_names: list[str],
+) -> tuple[int, set[tuple[str, str]], set[tuple[str, str]]]:
+    """Derive the current round-robin cycle and which pairs have been played.
+
+    Returns (cycle_number, pairs_played_this_cycle, all_possible_pairs).
+    Cycle is 1-indexed.  A cycle is complete when every possible pair has
+    played at least ``cycle`` times.
+    """
+    matches = list_matches()
+    all_possible: set[tuple[str, str]] = set()
+    for i, t1 in enumerate(team_names):
+        for t2 in team_names[i + 1 :]:
+            all_possible.add(tuple(sorted([t1, t2])))  # pyright: ignore[reportArgumentType]
+
+    if not all_possible:
+        return (1, set(), all_possible)
+
+    pair_counts: dict[tuple[str, str], int] = defaultdict(int)
+    for m in matches:
+        pair: tuple[str, str] = tuple(sorted([m.team1_name, m.team2_name]))  # pyright: ignore[reportAssignmentType]
+        if pair in all_possible:
+            pair_counts[pair] += 1
+
+    min_count = min((pair_counts.get(p, 0) for p in all_possible), default=0)
+    cycle = min_count + 1
+
+    played_this_cycle = {p for p in all_possible if pair_counts.get(p, 0) >= cycle}
+    return (cycle, played_this_cycle, all_possible)
+
+
+def generate_matchups() -> list[HeatMatchup]:
+    """Generate matchups for the next round using round-robin scheduling.
+
+    Cycle 1: pure round-robin on alphabetically-sorted teams (circle method).
+    Cycle 2+: score-seeded round-robin (circle method on standings-sorted teams).
+    Falls back to greedy pairing if no clean circle-method round is available.
     """
     leaderboard = compute_leaderboard()
-    all_team_names = get_team_names()
+    all_team_names = sorted(get_team_names())
+    n = len(all_team_names)
 
-    # Build a mapping of team -> total_score from leaderboard
+    if n < 2:
+        return []
+
+    # Build score map for point display
     score_map: dict[str, int] = {}
     for entry in leaderboard:
         score_map[entry.team_name] = entry.total_score
-
-    # Include teams that have no matches yet (score = 0)
     for name in all_team_names:
         if name not in score_map:
             score_map[name] = 0
 
-    # Sort by total_score descending, then alphabetically for tiebreaker
-    sorted_teams = sorted(
-        score_map.items(),
-        key=lambda x: (-x[1], x[0]),
-    )
+    cycle, played_this_cycle, all_possible = _compute_round_robin_state(all_team_names)
+    remaining = all_possible - played_this_cycle
 
-    matchups: list[HeatMatchup] = []
-    for i in range(0, len(sorted_teams) - 1, 2):
-        t1_name, t1_pts = sorted_teams[i]
-        t2_name, t2_pts = sorted_teams[i + 1]
-        matchups.append(
-            HeatMatchup(
-                team1_name=t1_name,
-                team2_name=t2_name,
-                team1_points=t1_pts,
-                team2_points=t2_pts,
-            )
+    if not remaining:
+        # All pairs played this cycle — start a fresh cycle
+        cycle += 1
+        played_this_cycle = set()
+        remaining = all_possible
+
+    # Choose team ordering based on cycle
+    if cycle == 1:
+        teams = list(all_team_names)
+    else:
+        win_map: dict[str, tuple[int, int]] = {}
+        for entry in leaderboard:
+            win_map[entry.team_name] = (entry.total_wins, entry.total_score)
+        teams = sorted(
+            all_team_names,
+            key=lambda t: win_map.get(t, (0, 0)),
+            reverse=True,
         )
 
-    return matchups
+    # Pad for odd count
+    padded = list(teams)
+    if len(padded) % 2 == 1:
+        padded.append(_BYE)
+
+    n_rounds = len(padded) - 1
+
+    # Try each circle-method round to find one whose pairs are all unplayed
+    for round_offset in range(n_rounds):
+        pairs = _circle_method_round(padded, round_offset)
+        real_pairs = [(a, b) for a, b in pairs if a != _BYE and b != _BYE]
+        pair_keys = {tuple(sorted([a, b])) for a, b in real_pairs}  # pyright: ignore[reportArgumentType]
+        if pair_keys and pair_keys.issubset(remaining):
+            return _pairs_to_matchups(real_pairs, score_map)
+
+    # Fallback: greedily pick unplayed pairs
+    return _greedy_matchups(all_team_names, remaining, score_map)
+
+
+def _pairs_to_matchups(
+    pairs: list[tuple[str, str]], score_map: dict[str, int]
+) -> list[HeatMatchup]:
+    """Convert a list of (team1, team2) pairs into HeatMatchup objects."""
+    return [
+        HeatMatchup(
+            team1_name=t1,
+            team2_name=t2,
+            team1_points=score_map.get(t1, 0),
+            team2_points=score_map.get(t2, 0),
+        )
+        for t1, t2 in pairs
+    ]
+
+
+def _greedy_matchups(
+    team_names: list[str],
+    remaining: set[tuple[str, str]],
+    score_map: dict[str, int],
+) -> list[HeatMatchup]:
+    """Greedily pair teams from unplayed pairs when no clean round exists."""
+    used: set[str] = set()
+    pairs: list[tuple[str, str]] = []
+    for pair in sorted(remaining):
+        t1, t2 = pair
+        if t1 not in used and t2 not in used:
+            pairs.append((t1, t2))
+            used.update([t1, t2])
+    return _pairs_to_matchups(pairs, score_map)
 
 
 def _get_heat_matches(heat_number: int) -> dict[tuple[str, str], tuple[int, int]]:

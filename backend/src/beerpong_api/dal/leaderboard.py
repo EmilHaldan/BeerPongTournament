@@ -36,11 +36,15 @@ def compute_leaderboard() -> list[LeaderboardEntry]:
 
         if match.team1_score > match.team2_score:
             stats[match.team1_name]["total_wins"] += 1
+            stats[match.team1_name]["total_score"] += 1
             stats[match.team2_name]["total_loss"] += 1
+            stats[match.team2_name]["total_score"] -= 1
         elif match.team2_score > match.team1_score:
             stats[match.team2_name]["total_wins"] += 1
+            stats[match.team2_name]["total_score"] += 1
             stats[match.team1_name]["total_loss"] += 1
-        # Ties: no change to wins/losses
+            stats[match.team1_name]["total_score"] -= 1
+        # Ties: no change to wins/losses or score adjustment
 
     entries = [LeaderboardEntry(team_name=team, **s) for team, s in stats.items()]
     entries.sort(key=lambda e: (e.total_wins, e.total_score), reverse=True)

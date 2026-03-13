@@ -1,3 +1,3 @@
 # ── Dev Environment ───────────────────────────────────────────────────
 environment = "dev"
-location    = "westeurope"
+location    = "northeurope"

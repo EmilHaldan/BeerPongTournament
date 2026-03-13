@@ -12,11 +12,11 @@ terraform {
     }
   }
 
-  # Uncomment and configure for remote state in CI:
-  # backend "azurerm" {
-  #   resource_group_name  = "tfstate-rg"
-  #   storage_account_name = "tfstatebeerpong"
-  #   container_name       = "tfstate"
-  #   key                  = "beerpong.tfstate"
-  # }
+  backend "azurerm" {
+    resource_group_name  = "tfstate-rg"
+    storage_account_name = "tfstatebeerpong"
+    container_name       = "tfstate"
+    key                  = "beerpong.tfstate"
+    use_oidc             = true
+  }
 }

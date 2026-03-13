@@ -231,3 +231,7 @@ beerpong_local.db-shm
 .claude/
 
 memory/
+
+# Un-ignore Terraform env var files (env/ is caught by Python venv pattern)
+!infra/env/
+!infra/env/*.tfvars

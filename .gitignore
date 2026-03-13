@@ -224,3 +224,8 @@ beerpong_local.db-wal
 beerpong_local.db-shm
 
 .vscode/settings.json
+
+# Claude Code local settings
+.claude/settings.local.json
+
+.claude/

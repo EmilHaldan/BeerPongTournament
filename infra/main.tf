@@ -85,7 +85,7 @@ resource "azurerm_container_registry" "acr" {
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
   sku                 = "Basic"
-  admin_enabled       = true
+  admin_enabled       = false
 
   tags = azurerm_resource_group.main.tags
 }
@@ -160,7 +160,7 @@ resource "azurerm_container_app" "backend" {
       }
       env {
         name  = "CORS_ORIGINS"
-        value = "*"
+        value = "https://${azurerm_static_web_app.frontend.default_host_name}"
       }
     }
   }
@@ -186,15 +186,13 @@ resource "azurerm_container_app" "backend" {
     value = var.admin_token
   }
 
-  secret {
-    name  = "acr-password"
-    value = azurerm_container_registry.acr.admin_password
+  registry {
+    server   = azurerm_container_registry.acr.login_server
+    identity = "System"
   }
 
-  registry {
-    server               = azurerm_container_registry.acr.login_server
-    username             = azurerm_container_registry.acr.admin_username
-    password_secret_name = "acr-password"
+  identity {
+    type = "SystemAssigned"
   }
 
   tags = azurerm_resource_group.main.tags
@@ -204,6 +202,14 @@ resource "azurerm_container_app" "backend" {
       template[0].container[0].image,
     ]
   }
+}
+
+# ── ACR Pull Permission (Managed Identity) ──────────────────────────
+
+resource "azurerm_role_assignment" "acr_pull" {
+  scope                = azurerm_container_registry.acr.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_container_app.backend.identity[0].principal_id
 }
 
 # ── Static Web App (Frontend) ────────────────────────────────────────

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh run:*)",
+      "Bash(gh secret:*)",
+      "Bash(az version:*)",
+      "Bash(winget install:*)"
+    ]
+  }
+}

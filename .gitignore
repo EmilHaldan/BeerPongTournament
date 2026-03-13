@@ -229,3 +229,5 @@ beerpong_local.db-shm
 .claude/settings.local.json
 
 .claude/
+
+memory/

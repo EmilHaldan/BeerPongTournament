@@ -1,5 +1,8 @@
 /* ── Beer Pong Tournament – Frontend JS ────────────────────────────── */
 
+// Current matchups cache (populated from heat info)
+let currentMatchups = [];
+
 // Timer state
 let timerInterval = null;
 let buzzerPlayed = false;
@@ -187,6 +190,9 @@ document.querySelectorAll(".tab").forEach((btn) => {
     if (btn.dataset.tab === "register") {
       populateTeamDropdowns();
       loadCurrentHeat();
+      // Reset cups hit dropdowns to 0
+      document.getElementById("team1_score").value = "0";
+      document.getElementById("team2_score").value = "0";
     }
   });
 });
@@ -248,70 +254,6 @@ function escapeHtml(text) {
 
 // ── Score Animation ──────────────────────────────────────────────────
 
-function fireConfetti(canvas) {
-  const ctx = canvas.getContext("2d");
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-
-  const particles = [];
-  const colors = ["#e94560", "#2ecc71", "#f1c40f", "#3498db", "#e67e22", "#9b59b6", "#1abc9c"];
-  for (let i = 0; i < 150; i++) {
-    particles.push({
-      x: canvas.width / 2 + (Math.random() - 0.5) * canvas.width * 0.4,
-      y: canvas.height * 0.45,
-      vx: (Math.random() - 0.5) * 16,
-      vy: -Math.random() * 18 - 4,
-      w: Math.random() * 8 + 4,
-      h: Math.random() * 6 + 2,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      rot: Math.random() * Math.PI * 2,
-      rv: (Math.random() - 0.5) * 0.3,
-      gravity: 0.35 + Math.random() * 0.15,
-    });
-  }
-
-  let frame = 0;
-  function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    let alive = false;
-    for (const p of particles) {
-      p.x += p.vx;
-      p.vy += p.gravity;
-      p.y += p.vy;
-      p.rot += p.rv;
-      if (p.y < canvas.height + 50) alive = true;
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot);
-      ctx.fillStyle = p.color;
-      ctx.globalAlpha = Math.max(0, 1 - frame / 120);
-      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-      ctx.restore();
-    }
-    frame++;
-    if (alive && frame < 120) requestAnimationFrame(draw);
-    else ctx.clearRect(0, 0, canvas.width, canvas.height);
-  }
-  requestAnimationFrame(draw);
-}
-
-function rollUpScore(el, from, to, duration, onDone) {
-  const start = performance.now();
-  const diff = to - from;
-  function tick(now) {
-    const t = Math.min((now - start) / duration, 1);
-    const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    el.textContent = Math.round(from + diff * eased);
-    if (t < 1) {
-      requestAnimationFrame(tick);
-    } else {
-      el.textContent = to;
-      if (onDone) onDone();
-    }
-  }
-  requestAnimationFrame(tick);
-}
-
 async function showScoreAnimation(t1Name, t1Cups, t2Name, t2Cups) {
   const overlay = document.getElementById("score-animation-overlay");
 
@@ -319,11 +261,9 @@ async function showScoreAnimation(t1Name, t1Cups, t2Name, t2Cups) {
   if (t1Cups > t2Cups) { t1Adj = 1; t2Adj = -1; }
   else if (t2Cups > t1Cups) { t2Adj = 1; t1Adj = -1; }
 
-  const isTie = t1Adj === 0;
-
   function adjLabel(adj) {
-    if (adj > 0) return "+2 pts";
-    if (adj < 0) return "-2 pts";
+    if (adj > 0) return "+1 pt";
+    if (adj < 0) return "-1 pt";
     return "\u00B10 pts";
   }
 
@@ -333,36 +273,15 @@ async function showScoreAnimation(t1Name, t1Cups, t2Name, t2Cups) {
     return "score-anim-adj tie";
   }
 
-  // Fetch current leaderboard to get real scores
-  let scoreMap = {};
-  try {
-    const resp = await fetch(API_BASE_URL + "/leaderboard");
-    if (resp.ok) {
-      const lb = await resp.json();
-      for (const e of lb) scoreMap[e.team_name] = e.total_score;
-    }
-  } catch (err) { /* use 0 as fallback */ }
-
-  const t1Score = scoreMap[t1Name] || 0;
-  const t2Score = scoreMap[t2Name] || 0;
-
   document.getElementById("anim-team1-name").textContent = t1Name;
-  document.getElementById("anim-team1-cups").textContent = t1Cups + " cups";
+  document.getElementById("anim-team1-cups").textContent = t1Cups;
   document.getElementById("anim-team1-adj").textContent = adjLabel(t1Adj);
   document.getElementById("anim-team1-adj").className = adjClass(t1Adj);
 
   document.getElementById("anim-team2-name").textContent = t2Name;
-  document.getElementById("anim-team2-cups").textContent = t2Cups + " cups";
+  document.getElementById("anim-team2-cups").textContent = t2Cups;
   document.getElementById("anim-team2-adj").textContent = adjLabel(t2Adj);
   document.getElementById("anim-team2-adj").className = adjClass(t2Adj);
-
-  // Reset state
-  const team1Side = document.getElementById("anim-team1-side");
-  const team2Side = document.getElementById("anim-team2-side");
-  const winnerSection = document.getElementById("anim-winner-section");
-  team1Side.classList.remove("fade-out-loser");
-  team2Side.classList.remove("fade-out-loser");
-  winnerSection.classList.add("hidden");
 
   // Reset animations by re-inserting the content
   overlay.classList.remove("hidden", "fade-out");
@@ -370,58 +289,14 @@ async function showScoreAnimation(t1Name, t1Cups, t2Name, t2Cups) {
   const clone = content.cloneNode(true);
   content.replaceWith(clone);
 
-  // Phase 1: show cups + adjustment (runs for ~2.5s via CSS animations)
-  // Phase 2 at 3s: fade out loser, show winner roll-up
+  // Show cups + adjustment animation, then fade out
   const delay = (ms) => new Promise(r => setTimeout(r, ms));
-
-  await delay(3000);
-
-  if (!isTie) {
-    const winnerName = t1Adj > 0 ? t1Name : t2Name;
-    const winnerOldScore = t1Adj > 0 ? t1Score : t2Score;
-    const loserSide = t1Adj < 0
-      ? document.getElementById("anim-team1-side")
-      : document.getElementById("anim-team2-side");
-    const winnerSide = t1Adj > 0
-      ? document.getElementById("anim-team1-side")
-      : document.getElementById("anim-team2-side");
-    const vsEl = overlay.querySelector(".score-anim-vs");
-
-    // Fade out loser + VS
-    loserSide.classList.add("fade-out-loser");
-    if (vsEl) vsEl.style.transition = "opacity 0.6s";
-    if (vsEl) vsEl.style.opacity = "0";
-
-    await delay(700);
-
-    // Hide loser side entirely, center winner
-    winnerSide.style.display = "none";
-    winnerSection.classList.remove("hidden");
-    document.getElementById("anim-winner-name").textContent = winnerName;
-    document.getElementById("anim-winner-score").textContent = winnerOldScore;
-
-    await delay(400);
-
-    // Roll up score
-    const scoreEl = document.getElementById("anim-winner-score");
-    rollUpScore(scoreEl, winnerOldScore, winnerOldScore + 2, 1200, () => {
-      fireConfetti(document.getElementById("confetti-canvas"));
-    });
-
-    await delay(3500);
-  } else {
-    await delay(2000);
-  }
+  await delay(4500);
 
   overlay.classList.add("fade-out");
   await delay(600);
   overlay.classList.add("hidden");
   overlay.classList.remove("fade-out");
-  // Reset inline styles
-  const vsEl = overlay.querySelector(".score-anim-vs");
-  if (vsEl) { vsEl.style.transition = ""; vsEl.style.opacity = ""; }
-  const sides = overlay.querySelectorAll(".score-anim-team");
-  sides.forEach(s => { s.style.display = ""; });
   document.querySelector('[data-tab="scoreboard"]').click();
 }
 
@@ -588,6 +463,37 @@ async function populateTeamDropdowns() {
   }
 }
 
+// Auto-select opponent when a team is selected in Register Score
+document.getElementById("team1_name").addEventListener("change", () => {
+  const selected = document.getElementById("team1_name").value;
+  if (!selected || currentMatchups.length === 0) return;
+  for (const m of currentMatchups) {
+    if (m.team1_name === selected) {
+      document.getElementById("team2_name").value = m.team2_name;
+      return;
+    }
+    if (m.team2_name === selected) {
+      document.getElementById("team2_name").value = m.team1_name;
+      return;
+    }
+  }
+});
+
+document.getElementById("team2_name").addEventListener("change", () => {
+  const selected = document.getElementById("team2_name").value;
+  if (!selected || currentMatchups.length === 0) return;
+  for (const m of currentMatchups) {
+    if (m.team1_name === selected) {
+      document.getElementById("team1_name").value = m.team2_name;
+      return;
+    }
+    if (m.team2_name === selected) {
+      document.getElementById("team1_name").value = m.team1_name;
+      return;
+    }
+  }
+});
+
 document.getElementById("refresh-teams-btn").addEventListener("click", loadTeams);
 
 // ── Heat ─────────────────────────────────────────────────────────────────
@@ -618,6 +524,9 @@ function stopHeatPolling() {
 }
 
 function renderHeatInfo(heatInfo) {
+  // Cache matchups for auto-select in Register Score
+  currentMatchups = heatInfo.matchups || [];
+
   document.getElementById("heat-number").textContent = heatInfo.current_heat;
 
   // Update timer display
@@ -644,8 +553,8 @@ function renderHeatInfo(heatInfo) {
 
         const redWinner = m.winner === redName;
         const blueWinner = m.winner === blueName;
-        const redMedal = redWinner ? '<span class="winner-medal">\u{1F947}</span>' : '';
-        const blueMedal = blueWinner ? '<span class="winner-medal">\u{1F947}</span>' : '';
+        const redMedalContent = redWinner ? '\u{1F947}' : '';
+        const blueMedalContent = blueWinner ? '\u{1F947}' : '';
         const recordedClass = m.recorded ? 'matchup-recorded' : 'matchup-pending';
         const scoreText = m.recorded
           ? `<span class="matchup-score">${redScore} \u2013 ${blueScore}</span>`
@@ -655,7 +564,7 @@ function renderHeatInfo(heatInfo) {
         return `
     <div class="matchup-card ${recordedClass}">
       <div class="matchup-team">
-        ${redMedal}<span class="matchup-color red">\u{1F534}</span><span class="matchup-name">${escapeHtml(redName)}</span>
+        <span class="matchup-medal-slot">${redMedalContent}</span><span class="matchup-color red">\u{1F534}</span><span class="matchup-name">${escapeHtml(redName)}</span>
         <span class="matchup-pts">${redPts} pts</span>
       </div>
       <div class="matchup-center">
@@ -664,7 +573,7 @@ function renderHeatInfo(heatInfo) {
         ${scoreText}
       </div>
       <div class="matchup-team">
-        <span class="matchup-name">${escapeHtml(blueName)}</span><span class="matchup-color blue">\u{1F535}</span>${blueMedal}
+        <span class="matchup-name">${escapeHtml(blueName)}</span><span class="matchup-color blue">\u{1F535}</span><span class="matchup-medal-slot">${blueMedalContent}</span>
         <span class="matchup-pts">${bluePts} pts</span>
       </div>
     </div>`;

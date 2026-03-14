@@ -561,10 +561,11 @@ async function populateTeamDropdowns() {
       // Restore previous selection if still valid
       if (current && names.includes(current)) sel.value = current;
     });
-    // Auto-select highlighted team as Team 1 if nothing selected
+    // Auto-select highlighted team as Team 1 and trigger opponent auto-fill
     const team1Sel = document.getElementById("team1_name");
-    if (highlightedTeam && !team1Sel.value && names.includes(highlightedTeam)) {
+    if (highlightedTeam && names.includes(highlightedTeam)) {
       team1Sel.value = highlightedTeam;
+      team1Sel.dispatchEvent(new Event("change"));
     }
   } catch (err) {
     showError("Could not load team names: " + err.message);
@@ -662,11 +663,19 @@ function renderHeatInfo(heatInfo) {
         // Underdog (team2, lower pts) goes on the left as Red (starts first)
         // Favorite (team1, higher pts) goes on the right as Blue
         const redName = m.team2_name;
-        const redPts = m.team2_points;
         const blueName = m.team1_name;
-        const bluePts = m.team1_points;
         const redScore = m.team2_score;
         const blueScore = m.team1_score;
+
+        // Display updated points if match is recorded (original + cups + win/loss bonus)
+        let redPts = m.team2_points;
+        let bluePts = m.team1_points;
+        if (m.recorded && redScore != null && blueScore != null) {
+          const redBonus = redScore > blueScore ? 1 : redScore < blueScore ? -1 : 0;
+          const blueBonus = blueScore > redScore ? 1 : blueScore < redScore ? -1 : 0;
+          redPts += redScore + redBonus;
+          bluePts += blueScore + blueBonus;
+        }
 
         const redWinner = m.winner === redName;
         const blueWinner = m.winner === blueName;
@@ -958,30 +967,37 @@ document.getElementById("save-timer-btn").addEventListener("click", async () => 
 // ── Team Highlight ────────────────────────────────────────────────────
 
 function applyTeamHighlight() {
-  // Leaderboard rows
+  const cls = "team-highlight-text";
+
+  // Leaderboard — team name cell
   document.querySelectorAll("#leaderboard-body tr").forEach(tr => {
     const nameCell = tr.querySelector("td:nth-child(2)");
-    tr.classList.toggle("team-highlight", !!(highlightedTeam && nameCell && nameCell.textContent === highlightedTeam));
+    if (nameCell) nameCell.classList.toggle(cls, !!(highlightedTeam && nameCell.textContent === highlightedTeam));
   });
 
-  // Heat matchup cards
-  document.querySelectorAll(".matchup-card").forEach(card => {
-    const names = Array.from(card.querySelectorAll(".matchup-name")).map(el => el.textContent);
-    card.classList.toggle("team-highlight", !!(highlightedTeam && names.includes(highlightedTeam)));
+  // Heat matchup cards — .matchup-name spans
+  document.querySelectorAll(".matchup-name").forEach(el => {
+    el.classList.toggle(cls, !!(highlightedTeam && el.textContent === highlightedTeam));
   });
 
-  // Teams rows
+  // Teams — team name cell
   document.querySelectorAll("#teams-body tr").forEach(tr => {
     const nameCell = tr.querySelector("td:nth-child(2)");
-    tr.classList.toggle("team-highlight", !!(highlightedTeam && nameCell && nameCell.textContent === highlightedTeam));
+    if (nameCell) nameCell.classList.toggle(cls, !!(highlightedTeam && nameCell.textContent === highlightedTeam));
   });
 
-  // Match history rows
+  // Match history — team1 (col 1) and team2 (col 4)
   document.querySelectorAll("#matches-body tr").forEach(tr => {
     const t1 = tr.querySelector("td:nth-child(1)");
     const t2 = tr.querySelector("td:nth-child(4)");
-    const match = highlightedTeam && ((t1 && t1.textContent === highlightedTeam) || (t2 && t2.textContent === highlightedTeam));
-    tr.classList.toggle("team-highlight", !!match);
+    if (t1) t1.classList.toggle(cls, !!(highlightedTeam && t1.textContent === highlightedTeam));
+    if (t2) t2.classList.toggle(cls, !!(highlightedTeam && t2.textContent === highlightedTeam));
+  });
+
+  // Score dropdowns — highlight option text
+  ["team1_name", "team2_name"].forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) sel.classList.toggle(cls, !!(highlightedTeam && sel.value === highlightedTeam));
   });
 }
 

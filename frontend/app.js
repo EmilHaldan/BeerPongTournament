@@ -10,6 +10,10 @@ let bellPlayed = false;
 let countdownSoundsPlayed = new Set(); // track which countdown numbers already played
 let lastTimerStartedAt = null; // Track timer state to detect new timer starts
 let heatPollInterval = null;
+let boardPollInterval = null;
+
+// "My team" highlight (ephemeral, lost on refresh)
+let highlightedTeam = null;
 
 // Shared AudioContext – unlocked on first user interaction
 let sharedAudioCtx = null;
@@ -181,7 +185,8 @@ document.querySelectorAll(".tab").forEach((btn) => {
     document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
 
     // Auto-refresh when switching tabs
-    if (btn.dataset.tab === "scoreboard") loadLeaderboard();
+    if (btn.dataset.tab === "scoreboard") startBoardPolling();
+    else stopBoardPolling();
     if (btn.dataset.tab === "matches") loadMatches();
     if (btn.dataset.tab === "teams") loadTeams();
     if (btn.dataset.tab === "nextheat") startHeatPolling();
@@ -246,6 +251,7 @@ function renderLeaderboard(entries) {
     </tr>`
     )
     .join("");
+  applyTeamHighlight();
 }
 
 function escapeHtml(text) {
@@ -470,6 +476,7 @@ function renderMatches(matches) {
     </tr>`
     )
     .join("");
+  applyTeamHighlight();
 }
 
 function formatDate(iso) {
@@ -519,7 +526,7 @@ async function loadTeams() {
 function renderTeams(teams) {
   const tbody = document.getElementById("teams-body");
   if (teams.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="empty-msg">No teams registered yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-msg">No teams registered yet</td></tr>';
     return;
   }
   tbody.innerHTML = teams
@@ -529,9 +536,11 @@ function renderTeams(teams) {
       <td>${i + 1}</td>
       <td>${escapeHtml(t.name)}</td>
       <td>${t.members.map(escapeHtml).join(", ")}</td>
+      <td><input type="checkbox" class="team-check" data-team="${escapeHtml(t.name)}" ${highlightedTeam === t.name ? "checked" : ""} /></td>
     </tr>`
     )
     .join("");
+  applyTeamHighlight();
 }
 
 async function populateTeamDropdowns() {
@@ -552,6 +561,11 @@ async function populateTeamDropdowns() {
       // Restore previous selection if still valid
       if (current && names.includes(current)) sel.value = current;
     });
+    // Auto-select highlighted team as Team 1 if nothing selected
+    const team1Sel = document.getElementById("team1_name");
+    if (highlightedTeam && !team1Sel.value && names.includes(highlightedTeam)) {
+      team1Sel.value = highlightedTeam;
+    }
   } catch (err) {
     showError("Could not load team names: " + err.message);
   }
@@ -614,6 +628,16 @@ function startHeatPolling() {
 
 function stopHeatPolling() {
   if (heatPollInterval) { clearInterval(heatPollInterval); heatPollInterval = null; }
+}
+
+function startBoardPolling() {
+  loadLeaderboard();
+  stopBoardPolling();
+  boardPollInterval = setInterval(loadLeaderboard, 1000);
+}
+
+function stopBoardPolling() {
+  if (boardPollInterval) { clearInterval(boardPollInterval); boardPollInterval = null; }
 }
 
 function renderHeatInfo(heatInfo) {
@@ -680,6 +704,7 @@ function renderHeatInfo(heatInfo) {
     <div class="heat-summary">
       <span>${recorded} / ${total} teams recorded</span>
     </div>`;
+  applyTeamHighlight();
 }
 
 async function loadCurrentHeat() {
@@ -928,6 +953,53 @@ document.getElementById("save-timer-btn").addEventListener("click", async () => 
   } catch (err) {
     showError("Failed to save timer duration: " + err.message);
   }
+});
+
+// ── Team Highlight ────────────────────────────────────────────────────
+
+function applyTeamHighlight() {
+  // Leaderboard rows
+  document.querySelectorAll("#leaderboard-body tr").forEach(tr => {
+    const nameCell = tr.querySelector("td:nth-child(2)");
+    tr.classList.toggle("team-highlight", !!(highlightedTeam && nameCell && nameCell.textContent === highlightedTeam));
+  });
+
+  // Heat matchup cards
+  document.querySelectorAll(".matchup-card").forEach(card => {
+    const names = Array.from(card.querySelectorAll(".matchup-name")).map(el => el.textContent);
+    card.classList.toggle("team-highlight", !!(highlightedTeam && names.includes(highlightedTeam)));
+  });
+
+  // Teams rows
+  document.querySelectorAll("#teams-body tr").forEach(tr => {
+    const nameCell = tr.querySelector("td:nth-child(2)");
+    tr.classList.toggle("team-highlight", !!(highlightedTeam && nameCell && nameCell.textContent === highlightedTeam));
+  });
+
+  // Match history rows
+  document.querySelectorAll("#matches-body tr").forEach(tr => {
+    const t1 = tr.querySelector("td:nth-child(1)");
+    const t2 = tr.querySelector("td:nth-child(4)");
+    const match = highlightedTeam && ((t1 && t1.textContent === highlightedTeam) || (t2 && t2.textContent === highlightedTeam));
+    tr.classList.toggle("team-highlight", !!match);
+  });
+}
+
+// Event delegation for team checkboxes
+document.getElementById("teams-body").addEventListener("change", (e) => {
+  if (!e.target.classList.contains("team-check")) return;
+  const teamName = e.target.dataset.team;
+
+  if (e.target.checked) {
+    highlightedTeam = teamName;
+    // Uncheck all other checkboxes
+    document.querySelectorAll(".team-check").forEach(cb => {
+      if (cb !== e.target) cb.checked = false;
+    });
+  } else {
+    highlightedTeam = null;
+  }
+  applyTeamHighlight();
 });
 
 // Initial load

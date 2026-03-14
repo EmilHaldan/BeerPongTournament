@@ -275,8 +275,8 @@ def get_heat_info() -> HeatInfo:
                 HeatMatchup(
                     team1_name=mu.team1_name,
                     team2_name=mu.team2_name,
-                    team1_points=mu.team1_points,
-                    team2_points=mu.team2_points,
+                    team1_points=score_map.get(mu.team1_name, 0),
+                    team2_points=score_map.get(mu.team2_name, 0),
                     team1_score=s1,
                     team2_score=s2,
                     recorded=True,
@@ -291,7 +291,18 @@ def get_heat_info() -> HeatInfo:
                 continue
             # Neither team has played yet — pending matchup
             handled_teams.update([mu.team1_name, mu.team2_name])
-            enriched.append(mu)
+            enriched.append(
+                HeatMatchup(
+                    team1_name=mu.team1_name,
+                    team2_name=mu.team2_name,
+                    team1_points=score_map.get(mu.team1_name, 0),
+                    team2_points=score_map.get(mu.team2_name, 0),
+                    team1_score=None,
+                    team2_score=None,
+                    recorded=False,
+                    winner=None,
+                )
+            )
             teams_not_recorded.extend([mu.team1_name, mu.team2_name])
 
     # --- Pass 2: add recorded matches not covered by stored matchups ---

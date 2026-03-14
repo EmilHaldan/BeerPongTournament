@@ -734,8 +734,8 @@ tbody tr:hover {
 /* ── Team Highlight ("My Team" checkbox) ──────────────────────────── */
 
 .team-highlight-text {
-  color: #41cffa;
-  text-shadow: 0 0 12px rgba(65, 207, 250, 1);
+  color: var(--success);
+  text-shadow: 0 0 8px rgba(46, 204, 113, 0.7);
 }
 
 .team-check {

@@ -3,14 +3,17 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Beer Pong Tournament</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 
 <body>
   <header>
-    <h1>🍺 Beer Pong Tournament</h1>
+    <h1 class="site-title">Beer Pong <span class="title-accent">Tournament</span></h1>
     <nav>
       <button class="tab active" data-tab="nextheat">Next Heat</button>
       <button class="tab" data-tab="scoreboard">Scoreboard</button>
@@ -45,7 +48,6 @@
           </tr>
         </tbody>
       </table>
-      <button id="refresh-btn" class="btn secondary">Refresh</button>
     </section>
 
     <!-- Next Heat tab -->
@@ -65,9 +67,6 @@
       <h2 style="text-align:center; margin: 1.5rem 0 1rem;">Matchups</h2>
       <div id="heat-matchups" class="heat-matchups">
         <p class="empty-msg">No matchups generated yet</p>
-      </div>
-      <div class="heat-actions">
-        <button id="refresh-heat-btn" class="btn secondary">Refresh</button>
       </div>
     </section>
 
@@ -92,12 +91,11 @@
           </tr>
         </tbody>
       </table>
-      <button id="refresh-matches-btn" class="btn secondary">Refresh</button>
     </section>
 
     <!-- Register score tab -->
     <section id="tab-register" class="tab-content">
-      <h2>Register Match Result (Trust based, dont be asshole)</h2>
+      <h2>Register Match Result<span class="subtitle">Trust based, don't be an asshole</span></h2>
       <form id="match-form">
         <div class="form-row">
           <div class="form-group">
@@ -168,7 +166,6 @@
           </tr>
         </tbody>
       </table>
-      <button id="refresh-teams-btn" class="btn secondary">Refresh</button>
     </section>
 
     <!-- Admin tab -->
@@ -271,17 +268,51 @@
         <div class="score-anim-team" id="anim-team1-side">
           <div class="score-anim-name" id="anim-team1-name"></div>
           <div class="score-anim-cups" id="anim-team1-cups"></div>
+          <div class="score-anim-cups-label" id="anim-team1-cups-label">cups hit</div>
           <div class="score-anim-adj" id="anim-team1-adj"></div>
+          <div class="score-anim-total" id="anim-team1-total"></div>
+          <div class="score-anim-total-label" id="anim-team1-total-label">total score</div>
         </div>
         <div class="score-anim-vs">VS</div>
         <div class="score-anim-team" id="anim-team2-side">
           <div class="score-anim-name" id="anim-team2-name"></div>
           <div class="score-anim-cups" id="anim-team2-cups"></div>
+          <div class="score-anim-cups-label" id="anim-team2-cups-label">cups hit</div>
           <div class="score-anim-adj" id="anim-team2-adj"></div>
+          <div class="score-anim-total" id="anim-team2-total"></div>
+          <div class="score-anim-total-label" id="anim-team2-total-label">total score</div>
         </div>
       </div>
     </div>
   </main>
+
+  <!-- Bottom Navigation (mobile only) -->
+  <nav class="bottom-nav">
+    <button class="tab active" data-tab="nextheat">
+      <svg viewBox="0 0 24 24"><path d="M7 2h10l-2 18H9L7 2z"/><path d="M6 2h12"/><line x1="9" y1="8" x2="15" y2="8" stroke-dasharray="1.5 1.5"/></svg>
+      <span>Heat</span>
+    </button>
+    <button class="tab" data-tab="scoreboard">
+      <svg viewBox="0 0 24 24"><path d="M6 9H3a1 1 0 0 0-1 1v4a4 4 0 0 0 4 4h0"/><path d="M18 9h3a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h0"/><path d="M6 4h12v9a6 6 0 0 1-6 6h0a6 6 0 0 1-6-6V4z"/><path d="M10 22h4"/><path d="M12 19v3"/></svg>
+      <span>Board</span>
+    </button>
+    <button class="tab" data-tab="register">
+      <svg viewBox="0 0 24 24"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+      <span>Score</span>
+    </button>
+    <button class="tab" data-tab="teams">
+      <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.87"/></svg>
+      <span>Teams</span>
+    </button>
+    <button class="tab" data-tab="matches">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>History</span>
+    </button>
+    <button class="tab" data-tab="admin">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <span>Admin</span>
+    </button>
+  </nav>
 
   <script src="config.js"></script>
   <script src="app.js"></script>

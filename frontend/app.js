@@ -129,7 +129,7 @@ function updateTimerDisplay(timerStartedAt, timerDuration) {
     if (preStartRemaining > 0) {
       // ── Pre-start countdown phase (5, 4, 3, 2, 1) ──
       const countNum = Math.ceil(preStartRemaining / 1200);
-      timerLabel.textContent = "Get Ready!";
+      timerLabel.innerHTML = "Get<br>Ready!";
       timerEl.textContent = countNum;
       timerEl.classList.remove("timer-expired");
       timerEl.classList.add("timer-countdown");
@@ -146,7 +146,7 @@ function updateTimerDisplay(timerStartedAt, timerDuration) {
     if (!bellPlayed) {
       bellPlayed = true;
       timerEl.classList.remove("timer-countdown");
-      timerLabel.textContent = "Time Remaining";
+      timerLabel.innerHTML = "Time<br>Remaining";
       playBell();
     }
 
@@ -230,6 +230,8 @@ function renderLeaderboard(entries) {
     tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No matches yet</td></tr>';
     return;
   }
+  // Sort by total score descending
+  entries.sort((a, b) => b.total_score - a.total_score);
   const medals = ["\u{1F947}", "\u{1F948}", "\u{1F949}"]; // gold, silver, bronze
   tbody.innerHTML = entries
     .map(
@@ -237,9 +239,9 @@ function renderLeaderboard(entries) {
     <tr>
       <td>${i < 3 ? medals[i] : i + 1}</td>
       <td>${escapeHtml(e.team_name)}</td>
+      <td>${e.total_score}</td>
       <td>${e.total_wins}</td>
       <td>${e.total_loss}</td>
-      <td>${e.total_score}</td>
       <td>${e.total_matches}</td>
     </tr>`
     )

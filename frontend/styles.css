@@ -218,7 +218,7 @@ tbody tr:hover {
   background: var(--accent);
   color: #fff;
   width: 100%;
-  margin-top: 1rem;
+  margin-top: 0.5rem;
 }
 
 .btn.primary:hover {
@@ -963,7 +963,7 @@ tbody tr:hover {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 4rem;
+    height: 3.2rem;
     background: var(--surface);
     border-top: 1px solid var(--surface2);
     display: flex;
@@ -996,8 +996,8 @@ tbody tr:hover {
   }
 
   .bottom-nav .tab svg {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     stroke: currentColor;
     fill: none;
     stroke-width: 1.8;
@@ -1024,12 +1024,12 @@ tbody tr:hover {
 
   /* Add padding to body so content isn't hidden behind bottom nav + Safari URL bar */
   body {
-    padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
   }
 
   /* Ensure bottom nav sits above Safari's URL bar */
   .bottom-nav {
-    padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.75rem);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.25rem);
   }
 }
 

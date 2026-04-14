@@ -19,6 +19,7 @@
       <button class="tab" data-tab="scoreboard">Scoreboard</button>
       <button class="tab" data-tab="register">Register Score</button>
       <button class="tab" data-tab="teams">Teams</button>
+      <button class="tab" data-tab="players">Players</button>
       <button class="tab" data-tab="matches">Matches</button>
       <button class="tab" data-tab="rules">Rules</button>
       <button class="tab" data-tab="admin">Admin</button>
@@ -170,6 +171,25 @@
       </table>
     </section>
 
+    <!-- Players tab -->
+    <section id="tab-players" class="tab-content">
+      <h2>Registered Players</h2>
+      <table id="players-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="players-body">
+          <tr>
+            <td colspan="3" class="empty-msg">No players registered yet</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <!-- Admin tab -->
     <section id="tab-admin" class="tab-content">
       <!-- Login gate -->
@@ -240,6 +260,38 @@
             <tbody id="admin-teams-body">
               <tr>
                 <td colspan="4" class="empty-msg">No teams yet</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Add Player -->
+        <div class="admin-section">
+          <h3>Add Player</h3>
+          <form id="add-player-form">
+            <div class="form-group">
+              <label for="new-player-name">Player Name</label>
+              <input type="text" id="new-player-name" placeholder="e.g. Alice" required />
+            </div>
+            <button type="submit" class="btn primary">Add Player</button>
+          </form>
+          <div id="add-player-success" class="success-msg hidden">Player added! ✓</div>
+        </div>
+
+        <!-- Manage Players -->
+        <div class="admin-section">
+          <h3>Manage Players</h3>
+          <table id="admin-players-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="admin-players-body">
+              <tr>
+                <td colspan="3" class="empty-msg">No players yet</td>
               </tr>
             </tbody>
           </table>
@@ -355,6 +407,10 @@
     <button class="tab" data-tab="teams">
       <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.87"/></svg>
       <span>Teams</span>
+    </button>
+    <button class="tab" data-tab="players">
+      <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+      <span>Players</span>
     </button>
     <button class="tab" data-tab="matches">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>

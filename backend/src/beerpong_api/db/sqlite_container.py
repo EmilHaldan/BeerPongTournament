@@ -83,11 +83,12 @@ class SqliteContainer:
 
 def create_sqlite_containers(
     db_path: Path = _DEFAULT_DB_PATH,
-) -> tuple[SqliteContainer, SqliteContainer, SqliteContainer]:
-    """Create matches + teams + state containers sharing one SQLite connection."""
+) -> tuple[SqliteContainer, SqliteContainer, SqliteContainer, SqliteContainer]:
+    """Create matches + teams + state + players containers sharing one SQLite connection."""
     conn = sqlite3.connect(str(db_path), check_same_thread=False, timeout=10)
     conn.execute("PRAGMA journal_mode=WAL")
     matches = SqliteContainer(conn, table_name="matches")
     teams = SqliteContainer(conn, table_name="teams")
     state = SqliteContainer(conn, table_name="state")
-    return matches, teams, state
+    players = SqliteContainer(conn, table_name="players")
+    return matches, teams, state, players

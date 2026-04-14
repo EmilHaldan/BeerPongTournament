@@ -92,6 +92,14 @@ resource "azurerm_cosmosdb_sql_container" "state" {
   partition_key_paths = ["/tournamentId"]
 }
 
+resource "azurerm_cosmosdb_sql_container" "players" {
+  name                = "players"
+  resource_group_name = azurerm_resource_group.main.name
+  account_name        = azurerm_cosmosdb_account.db.name
+  database_name       = azurerm_cosmosdb_sql_database.beerpong.name
+  partition_key_paths = ["/tournamentId"]
+}
+
 # ── Container Registry ────────────────────────────────────────────────
 
 resource "azurerm_container_registry" "acr" {

@@ -189,6 +189,7 @@ document.querySelectorAll(".tab").forEach((btn) => {
     else stopBoardPolling();
     if (btn.dataset.tab === "matches") loadMatches();
     if (btn.dataset.tab === "teams") loadTeams();
+    if (btn.dataset.tab === "players") loadPlayers();
     if (btn.dataset.tab === "nextheat") startHeatPolling();
     else stopHeatPolling();
     if (btn.dataset.tab === "admin") loadAdminHeatInfo();
@@ -572,6 +573,38 @@ async function populateTeamDropdowns() {
   }
 }
 
+// ── Players ──────────────────────────────────────────────────────────
+
+async function loadPlayers() {
+  try {
+    const resp = await fetch(API_BASE_URL + "/players");
+    if (!resp.ok) throw new Error("Failed to load players");
+    const data = await resp.json();
+    renderPlayers(data);
+  } catch (err) {
+    showError("Could not load players: " + err.message);
+  }
+}
+
+function renderPlayers(players) {
+  const tbody = document.getElementById("players-body");
+  if (players.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="empty-msg">No players registered yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = players
+    .map(
+      (p, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${escapeHtml(p.name)}</td>
+      <td></td>
+    </tr>`
+    )
+    .join("");
+}
+
+
 // Auto-select opponent when a team is selected in Register Score
 document.getElementById("team1_name").addEventListener("change", () => {
   const selected = document.getElementById("team1_name").value;
@@ -847,6 +880,7 @@ document.getElementById("admin-login-btn").addEventListener("click", async () =>
     document.getElementById("admin-panel").classList.remove("hidden");
     loadAdminHeatInfo();
     loadAdminTeams();
+    loadAdminPlayers();
   } catch (err) {
     showError("Could not verify PIN: " + err.message);
   }
@@ -944,6 +978,93 @@ async function deleteTeam(teamId) {
     loadAdminTeams();
   } catch (err) {
     showError("Failed to delete team: " + err.message);
+  }
+}
+
+// ── Admin: Add Player ─────────────────────────────────────────────────
+
+document.getElementById("add-player-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = document.getElementById("new-player-name").value.trim();
+
+  if (!name) {
+    showError("Player name is required");
+    return;
+  }
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/players", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+      body: JSON.stringify({ name }),
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      throw new Error(detail.detail || "Server error " + resp.status);
+    }
+    document.getElementById("add-player-form").reset();
+    const msg = document.getElementById("add-player-success");
+    msg.classList.remove("hidden");
+    setTimeout(() => msg.classList.add("hidden"), 3000);
+    loadAdminPlayers();
+    // Refresh the public Players tab list too
+    if (document.getElementById("tab-players").classList.contains("active")) {
+      loadPlayers();
+    }
+  } catch (err) {
+    showError("Failed to add player: " + err.message);
+  }
+});
+
+// ── Admin: Manage Players ─────────────────────────────────────────────
+
+async function loadAdminPlayers() {
+  try {
+    const resp = await fetch(API_BASE_URL + "/players");
+    if (!resp.ok) throw new Error("Failed to load players");
+    const data = await resp.json();
+    renderAdminPlayers(data);
+  } catch (err) {
+    showError("Could not load players: " + err.message);
+  }
+}
+
+function renderAdminPlayers(players) {
+  const tbody = document.getElementById("admin-players-body");
+  if (players.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="empty-msg">No players yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = players
+    .map(
+      (p, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${escapeHtml(p.name)}</td>
+      <td><button class="btn-delete" onclick="deletePlayer('${p.id}')">✕</button></td>
+    </tr>`
+    )
+    .join("");
+}
+
+async function deletePlayer(playerId) {
+  if (!confirm("Are you sure you want to remove this player?")) return;
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/players/" + playerId, {
+      method: "DELETE",
+      headers: { "X-Admin-Token": adminToken },
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      throw new Error(detail.detail || "Server error " + resp.status);
+    }
+    loadAdminPlayers();
+    if (document.getElementById("tab-players").classList.contains("active")) {
+      loadPlayers();
+    }
+  } catch (err) {
+    showError("Failed to delete player: " + err.message);
   }
 }
 

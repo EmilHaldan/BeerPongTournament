@@ -224,13 +224,20 @@ def get_heat() -> HeatInfo:
 
 @router.post("/heat/start-next", response_model=HeatInfo, status_code=200)
 def start_next_heat(
+    payload: dict[str, bool] | None = None,
     x_admin_token: str = Header(..., alias="X-Admin-Token"),
 ) -> HeatInfo:
-    """Advance to the next heat and return the new matchups (admin only)."""
+    """Advance to the next heat and return the new matchups (admin only).
+
+    Optional body ``{"last_heat": bool}`` forces the games-balance scheduler
+    path so teams with the fewest matches get priority, regardless of the
+    table count.
+    """
     settings = get_settings()
     if x_admin_token != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid admin token")
-    return advance_heat()
+    last_heat = bool((payload or {}).get("last_heat", False))
+    return advance_heat(last_heat=last_heat)
 
 
 @router.post("/heat/set", response_model=HeatInfo, status_code=200)
@@ -279,11 +286,25 @@ def set_tables_route(
     payload: dict[str, int],
     x_admin_token: str = Header(..., alias="X-Admin-Token"),
 ) -> HeatInfo:
-    """Set the number of physical tables available (admin only)."""
+    """Set the number of physical tables available (admin only).
+
+    Rejects counts below 1 or counts too low to seat half of the registered
+    teams (``count * 2 < len(team_names)``) – there's no point letting the
+    admin pick a value that cannot schedule a playable heat.
+    """
     settings = get_settings()
     if x_admin_token != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid admin token")
     count = payload.get("count")
     if count is None or count < 1:
         raise HTTPException(status_code=400, detail="Tables count must be at least 1")
+    team_names = get_team_names()
+    if count * 2 < len(team_names):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Tables count must allow at least half of registered teams to play "
+                "(need tables >= ceil(teams / 2))"
+            ),
+        )
     return set_tables(count)

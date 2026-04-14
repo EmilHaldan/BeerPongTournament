@@ -14,7 +14,7 @@ from beerpong_api.dal.leaderboard import compute_leaderboard
 from beerpong_api.dal.matches import list_matches
 from beerpong_api.dal.teams import get_team_names
 from beerpong_api.db.client import get_state_container
-from beerpong_api.db.models import HeatInfo, HeatMatchup, HeatState
+from beerpong_api.db.models import HeatInfo, HeatMatchup, HeatState, LeaderboardEntry
 
 # Heat timer duration in seconds (10 minutes)
 HEAT_TIMER_SECONDS = 600
@@ -102,19 +102,31 @@ def _compute_round_robin_state(
     return (cycle, played_this_cycle, all_possible)
 
 
-def generate_matchups() -> list[HeatMatchup]:
-    """Generate matchups for the next round using round-robin scheduling.
+def generate_matchups(last_heat: bool = False) -> tuple[list[HeatMatchup], list[str]]:
+    """Generate matchups for the next round and a sit-out list.
 
-    Cycle 1: pure round-robin on alphabetically-sorted teams (circle method).
-    Cycle 2+: score-seeded round-robin (circle method on standings-sorted teams).
-    Falls back to greedy pairing if no clean circle-method round is available.
+    Two scheduling paths are supported:
+
+    * Round-robin (default): circle method with cycle detection. Used when
+      the tables count permits every team to play and ``last_heat`` is False.
+      Cycle 1 uses alphabetical seeding; cycle 2+ uses standings-seeded
+      ordering for competitive matchmaking.
+    * Games-balance: triggered when EITHER the table count cannot fit all
+      teams (``tables * 2 < teams_count``) OR the caller passes
+      ``last_heat=True``. Teams are sorted ascending by
+      ``(total_matches, total_score)`` so those with the fewest games (or
+      lowest scores as the tiebreaker) get priority to play. The remaining
+      tail sits this heat out.
+
+    Returns a tuple ``(matchups, sitting_out)`` where ``sitting_out`` is the
+    list of team names that should not play this heat (sorted alphabetically).
     """
     leaderboard = compute_leaderboard()
     all_team_names = sorted(get_team_names())
     n = len(all_team_names)
 
     if n < 2:
-        return []
+        return ([], [])
 
     # Build score map for point display
     score_map: dict[str, int] = {}
@@ -124,6 +136,21 @@ def generate_matchups() -> list[HeatMatchup]:
         if name not in score_map:
             score_map[name] = 0
 
+    tables = _get_heat_state().tables
+    constrained = tables * 2 < n
+
+    if constrained or last_heat:
+        return _generate_balance_matchups(all_team_names, leaderboard, score_map, tables)
+
+    return (_generate_round_robin_matchups(all_team_names, leaderboard, score_map), [])
+
+
+def _generate_round_robin_matchups(
+    all_team_names: list[str],
+    leaderboard: list[LeaderboardEntry],
+    score_map: dict[str, int],
+) -> list[HeatMatchup]:
+    """Pure round-robin pairings via the circle method, with cycle detection."""
     cycle, played_this_cycle, all_possible = _compute_round_robin_state(all_team_names)
     remaining = all_possible - played_this_cycle
 
@@ -163,6 +190,63 @@ def generate_matchups() -> list[HeatMatchup]:
 
     # Fallback: greedily pick unplayed pairs
     return _greedy_matchups(all_team_names, remaining, score_map)
+
+
+def _generate_balance_matchups(
+    all_team_names: list[str],
+    leaderboard: list[LeaderboardEntry],
+    score_map: dict[str, int],
+    tables: int,
+) -> tuple[list[HeatMatchup], list[str]]:
+    """Pick a subset of teams by lowest (total_matches, total_score) and pair them.
+
+    The selected subset (those that play) is fed to the circle method in
+    standings-sorted order so the pairings still mix high- and low-ranked
+    teams visually. Anyone left over sits out.
+    """
+    n = len(all_team_names)
+    games_this_heat = min(tables, n // 2)
+    playing_count = 2 * games_this_heat
+
+    # (total_matches, total_score) lookup – missing entries default to (0, 0)
+    stats: dict[str, tuple[int, int]] = {
+        e.team_name: (e.total_matches, e.total_score) for e in leaderboard
+    }
+    for name in all_team_names:
+        stats.setdefault(name, (0, 0))
+
+    # Ascending: fewest matches first, lowest score as tiebreaker.
+    # Alphabetical name as the final stable tiebreaker for deterministic output.
+    sorted_by_priority = sorted(
+        all_team_names,
+        key=lambda t: (stats[t][0], stats[t][1], t),
+    )
+
+    playing = sorted_by_priority[:playing_count]
+    sitting = sorted(sorted_by_priority[playing_count:])
+
+    # Use the standings-sorted order (priority order) within the selected
+    # subset as input to the circle method – preserves the "mix" intent.
+    matchups = _circle_method_pairings(playing, score_map)
+    return (matchups, sitting)
+
+
+def _circle_method_pairings(
+    teams: list[str], score_map: dict[str, int]
+) -> list[HeatMatchup]:
+    """Run a single circle-method round on the given (already-ordered) teams.
+
+    Pads with a BYE for odd counts so callers don't need to special-case.
+    Returns the resulting matchups, dropping any pair that involved the BYE.
+    """
+    if len(teams) < 2:
+        return []
+    padded = list(teams)
+    if len(padded) % 2 == 1:
+        padded.append(_BYE)
+    pairs = _circle_method_round(padded, 0)
+    real_pairs = [(a, b) for a, b in pairs if a != _BYE and b != _BYE]
+    return _pairs_to_matchups(real_pairs, score_map)
 
 
 def _pairs_to_matchups(
@@ -245,9 +329,11 @@ def get_heat_info() -> HeatInfo:
     # --- Use stored matchups or generate new ones ---
     if state.stored_matchups:
         base_matchups = state.stored_matchups
+        stored_sitting_out = list(state.sitting_out)
     else:
-        base_matchups = generate_matchups()
+        base_matchups, stored_sitting_out = generate_matchups()
         state.stored_matchups = base_matchups
+        state.sitting_out = stored_sitting_out
         _save_heat_state(state)
 
     # --- Pass 1: process stored matchups in order (preserving table numbers) ---
@@ -332,22 +418,34 @@ def get_heat_info() -> HeatInfo:
         )
         teams_recorded.extend([t1, t2])
 
+    # Teams that are listed as sitting out but actually have a recorded match
+    # for this heat should drop off the display — recorded matches win.
+    teams_sitting_out = sorted(t for t in stored_sitting_out if t not in teams_in_recorded)
+
     return HeatInfo(
         current_heat=current,
         matchups=enriched,
         teams_recorded=sorted(teams_recorded),
         teams_not_recorded=sorted(teams_not_recorded),
+        teams_sitting_out=teams_sitting_out,
         timer_duration=state.timer_duration,
         timer_started_at=state.heat_timer_started_at,
         tables=state.tables,
     )
 
 
-def advance_heat() -> HeatInfo:
-    """Increment the heat counter and return the new heat info."""
+def advance_heat(last_heat: bool = False) -> HeatInfo:
+    """Increment the heat counter and return the new heat info.
+
+    Passing ``last_heat=True`` forces the games-balance scheduler path so
+    teams with the fewest matches get priority even when tables would
+    otherwise permit a full round-robin slate.
+    """
     state = _get_heat_state()
     state.current_heat += 1
-    state.stored_matchups = generate_matchups()
+    matchups, sitting = generate_matchups(last_heat=last_heat)
+    state.stored_matchups = matchups
+    state.sitting_out = sitting
     state.heat_timer_started_at = None
     _save_heat_state(state)
     return get_heat_info()
@@ -357,7 +455,9 @@ def set_heat(heat_number: int) -> HeatInfo:
     """Set the heat counter to an explicit value and return the new heat info."""
     state = _get_heat_state()
     state.current_heat = heat_number
-    state.stored_matchups = generate_matchups()
+    matchups, sitting = generate_matchups()
+    state.stored_matchups = matchups
+    state.sitting_out = sitting
     state.heat_timer_started_at = None
     _save_heat_state(state)
     return get_heat_info()

@@ -746,6 +746,23 @@ function renderHeatInfo(heatInfo) {
     <div class="heat-summary">
       <span>${recorded} / ${total} teams recorded</span>
     </div>`;
+
+  // Sitting-out section
+  const sittingSection = document.getElementById("heat-sitting-out");
+  const sittingList = document.getElementById("heat-sitting-out-list");
+  const sitting = heatInfo.teams_sitting_out || [];
+  if (sittingSection && sittingList) {
+    if (sitting.length === 0) {
+      sittingSection.classList.add("hidden");
+      sittingList.innerHTML = "";
+    } else {
+      sittingSection.classList.remove("hidden");
+      sittingList.innerHTML = sitting
+        .map((name) => `<li>${escapeHtml(name)}</li>`)
+        .join("");
+    }
+  }
+
   applyTeamHighlight();
 }
 
@@ -762,12 +779,18 @@ async function loadCurrentHeat() {
 }
 
 document.getElementById("start-next-heat-btn").addEventListener("click", async () => {
-  if (!confirm("This will setup the next heat (advance heat number and generate new matchups). Continue?")) return;
+  const lastHeatCheckbox = document.getElementById("last-heat-checkbox");
+  const lastHeat = !!(lastHeatCheckbox && lastHeatCheckbox.checked);
+  const promptMsg = lastHeat
+    ? "Setup the next (LAST) heat – teams with the fewest games get priority. Continue?"
+    : "This will setup the next heat (advance heat number and generate new matchups). Continue?";
+  if (!confirm(promptMsg)) return;
 
   try {
     const resp = await fetch(API_BASE_URL + "/heat/start-next", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+      body: JSON.stringify({ last_heat: lastHeat }),
     });
     if (!resp.ok) {
       const detail = await resp.json().catch(() => ({}));
@@ -776,6 +799,8 @@ document.getElementById("start-next-heat-btn").addEventListener("click", async (
     const data = await resp.json();
     renderHeatInfo(data);
     updateAdminHeat(data.current_heat);
+    // Reset the checkbox so it does not carry over to the next invocation.
+    if (lastHeatCheckbox) lastHeatCheckbox.checked = false;
   } catch (err) {
     showError("Could not setup next heat: " + err.message);
   }

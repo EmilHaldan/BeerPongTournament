@@ -579,6 +579,42 @@ tbody tr:hover {
   font-size: 1.1rem;
 }
 
+/* ── Sitting-out (balance mode) ─────────────────────────────────────── */
+
+.heat-sitting-out {
+  max-width: 480px;
+  margin: 1.5rem auto 0;
+  padding: 0.9rem 1.2rem;
+  background: var(--surface);
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.heat-sitting-out.hidden {
+  display: none;
+}
+
+.heat-sitting-out h3 {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.heat-sitting-out ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0;
+}
+
+.heat-sitting-out li {
+  margin: 0.15rem 0;
+  color: var(--text);
+}
+
 /* ── Locked input ───────────────────────────────────────────────────── */
 
 .locked-input {
@@ -732,6 +768,25 @@ tbody tr:hover {
 .admin-actions .btn.primary {
   width: auto;
   margin-top: 0;
+}
+
+.admin-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.admin-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 @media (max-width: 500px) {

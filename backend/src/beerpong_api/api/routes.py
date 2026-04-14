@@ -11,6 +11,7 @@ from beerpong_api.dal.heat import (
     advance_heat,
     get_heat_info,
     set_heat,
+    set_tables,
     set_timer_duration,
     start_heat_timer,
 )
@@ -233,3 +234,18 @@ def set_timer_duration_route(
     if seconds is None or seconds < 60:
         raise HTTPException(status_code=400, detail="Duration must be at least 60 seconds")
     return set_timer_duration(seconds)
+
+
+@router.post("/heat/tables", response_model=HeatInfo, status_code=200)
+def set_tables_route(
+    payload: dict[str, int],
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> HeatInfo:
+    """Set the number of physical tables available (admin only)."""
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    count = payload.get("count")
+    if count is None or count < 1:
+        raise HTTPException(status_code=400, detail="Tables count must be at least 1")
+    return set_tables(count)

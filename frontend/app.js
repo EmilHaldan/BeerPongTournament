@@ -12,8 +12,18 @@ let lastTimerStartedAt = null; // Track timer state to detect new timer starts
 let heatPollInterval = null;
 let boardPollInterval = null;
 
-// "My team" highlight (ephemeral, lost on refresh)
+// "My team" highlight — persisted to localStorage, self-heals post-roster-change.
 let highlightedTeam = null;
+let highlightedPlayer = null;
+
+// Cache of the most recently fetched teams + players. Populated by
+// loadTeamsAndPlayers() and consumed by render helpers, the dropdowns, and the
+// highlight handlers when they need to resolve a player -> team lookup.
+let teamsCache = [];
+let playersCache = [];
+
+const HIGHLIGHT_TEAM_KEY = "beerpong.highlightedTeam";
+const HIGHLIGHT_PLAYER_KEY = "beerpong.highlightedPlayer";
 
 // Shared AudioContext – unlocked on first user interaction
 let sharedAudioCtx = null;
@@ -188,13 +198,14 @@ document.querySelectorAll(".tab").forEach((btn) => {
     if (btn.dataset.tab === "scoreboard") startBoardPolling();
     else stopBoardPolling();
     if (btn.dataset.tab === "matches") loadMatches();
-    if (btn.dataset.tab === "teams") loadTeams();
-    if (btn.dataset.tab === "players") loadPlayers();
+    if (btn.dataset.tab === "teams") loadTeamsAndPlayers();
     if (btn.dataset.tab === "nextheat") startHeatPolling();
     else stopHeatPolling();
     if (btn.dataset.tab === "admin") loadAdminHeatInfo();
     if (btn.dataset.tab === "register") {
-      populateTeamDropdowns();
+      // Refresh the roster cache so dropdowns reflect any CSV uploads, new
+      // teams, or deletions that happened since the last visit.
+      loadTeamsAndPlayers();
       loadCurrentHeat();
       // Reset cups hit dropdowns to 0
       document.getElementById("team1_score").value = "0";
@@ -511,97 +522,125 @@ async function deleteMatch(matchId) {
 }
 
 
-// ── Teams ────────────────────────────────────────────────────────────
+// ── Teams + Players ──────────────────────────────────────────────────
 
-async function loadTeams() {
+async function loadTeamsAndPlayers() {
   try {
-    const resp = await fetch(API_BASE_URL + "/teams");
-    if (!resp.ok) throw new Error("Failed to load teams");
-    const data = await resp.json();
-    renderTeams(data);
+    const [teamsResp, playersResp] = await Promise.all([
+      fetch(API_BASE_URL + "/teams"),
+      fetch(API_BASE_URL + "/players"),
+    ]);
+    if (!teamsResp.ok) throw new Error("Failed to load teams");
+    if (!playersResp.ok) throw new Error("Failed to load players");
+    const [teams, players] = await Promise.all([teamsResp.json(), playersResp.json()]);
+    teamsCache = teams;
+    playersCache = players;
+    renderTeams(teams, players);
+    renderRegisteredPlayers(players, teams);
+    populateTeamDropdowns();
   } catch (err) {
-    showError("Could not load teams: " + err.message);
+    showError("Could not load roster: " + err.message);
   }
 }
 
-function renderTeams(teams) {
+function _playerNameById(players, playerId) {
+  const hit = players.find(p => p.id === playerId);
+  return hit ? hit.name : "";
+}
+
+function _teamNameByPlayerId(teams, playerTeamId) {
+  if (!playerTeamId) return "";
+  const hit = teams.find(t => t.id === playerTeamId);
+  return hit ? hit.name : "";
+}
+
+function renderTeams(teams, players) {
   const tbody = document.getElementById("teams-body");
-  if (teams.length === 0) {
+  // Public Teams tab hides 0-member teams entirely — admin-only per spec.
+  const visible = (teams || []).filter(t => (t.member_ids || []).length > 0);
+  if (visible.length === 0) {
     tbody.innerHTML = '<tr><td colspan="4" class="empty-msg">No teams registered yet</td></tr>';
     return;
   }
-  tbody.innerHTML = teams
+  tbody.innerHTML = visible
     .map(
-      (t, i) => `
+      (t, i) => {
+        const memberNames = (t.member_ids || [])
+          .map(pid => _playerNameById(players || [], pid))
+          .filter(n => n.length > 0);
+        const memberSpans = memberNames
+          .map(name => `<span class="team-member-name" data-player="${escapeHtml(name)}">${escapeHtml(name)}</span>`)
+          .join(", ");
+        // The team checkbox stays checked whenever the active team matches —
+        // including when a player on that team is the primary selection, since
+        // player selection auto-checks the parent team.
+        const teamChecked = highlightedTeam === t.name ? "checked" : "";
+        return `
     <tr>
       <td>${i + 1}</td>
-      <td>${escapeHtml(t.name)}</td>
-      <td>${t.members.map(escapeHtml).join(", ")}</td>
-      <td><input type="checkbox" class="team-check" data-team="${escapeHtml(t.name)}" ${highlightedTeam === t.name ? "checked" : ""} /></td>
-    </tr>`
+      <td class="team-name-cell" data-team="${escapeHtml(t.name)}">${escapeHtml(t.name)}</td>
+      <td>${memberSpans}</td>
+      <td><input type="checkbox" class="team-check" data-team="${escapeHtml(t.name)}" ${teamChecked} /></td>
+    </tr>`;
+      }
     )
     .join("");
   applyTeamHighlight();
 }
 
-async function populateTeamDropdowns() {
-  try {
-    const resp = await fetch(API_BASE_URL + "/teams/names");
-    if (!resp.ok) throw new Error("Failed to load team names");
-    const names = await resp.json();
-    const selects = [document.getElementById("team1_name"), document.getElementById("team2_name")];
-    selects.forEach((sel) => {
-      const current = sel.value;
-      sel.innerHTML = '<option value="" disabled selected>Select a team</option>';
-      names.forEach((name) => {
-        const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = name;
-        sel.appendChild(opt);
-      });
-      // Restore previous selection if still valid
-      if (current && names.includes(current)) sel.value = current;
-    });
-    // Auto-select highlighted team as Team 1 and trigger opponent auto-fill
-    const team1Sel = document.getElementById("team1_name");
-    if (highlightedTeam && names.includes(highlightedTeam)) {
-      team1Sel.value = highlightedTeam;
-      team1Sel.dispatchEvent(new Event("change"));
-    }
-  } catch (err) {
-    showError("Could not load team names: " + err.message);
-  }
-}
-
-// ── Players ──────────────────────────────────────────────────────────
-
-async function loadPlayers() {
-  try {
-    const resp = await fetch(API_BASE_URL + "/players");
-    if (!resp.ok) throw new Error("Failed to load players");
-    const data = await resp.json();
-    renderPlayers(data);
-  } catch (err) {
-    showError("Could not load players: " + err.message);
-  }
-}
-
-function renderPlayers(players) {
+function renderRegisteredPlayers(players, teams) {
   const tbody = document.getElementById("players-body");
-  if (players.length === 0) {
+  const safePlayers = (players || []).slice();
+  if (safePlayers.length === 0) {
     tbody.innerHTML = '<tr><td colspan="3" class="empty-msg">No players registered yet</td></tr>';
     return;
   }
-  tbody.innerHTML = players
+  // Sort by name using the default locale — handles Danish Æ/Ø/Å correctly.
+  safePlayers.sort((a, b) => a.name.localeCompare(b.name));
+  tbody.innerHTML = safePlayers
     .map(
-      (p, i) => `
-    <tr>
+      (p, i) => {
+        const teamName = _teamNameByPlayerId(teams || [], p.team_id);
+        const unassigned = !p.team_id;
+        const rowCls = unassigned ? ' class="player-unassigned"' : '';
+        const checked = highlightedPlayer === p.name ? "checked" : "";
+        return `
+    <tr${rowCls}>
       <td>${i + 1}</td>
-      <td>${escapeHtml(p.name)}</td>
-      <td></td>
-    </tr>`
+      <td class="player-name-cell" data-player="${escapeHtml(p.name)}">${escapeHtml(p.name)}</td>
+      <td><input type="checkbox" class="player-check" data-player="${escapeHtml(p.name)}" data-team="${escapeHtml(teamName)}" ${checked} /></td>
+    </tr>`;
+      }
     )
     .join("");
+  applyTeamHighlight();
+}
+
+function populateTeamDropdowns() {
+  // Filter 0-member teams out client-side since /teams/names does not.
+  const names = (teamsCache || [])
+    .filter(t => (t.member_ids || []).length > 0)
+    .map(t => t.name)
+    .sort((a, b) => a.localeCompare(b));
+  const selects = [document.getElementById("team1_name"), document.getElementById("team2_name")];
+  selects.forEach((sel) => {
+    const current = sel.value;
+    sel.innerHTML = '<option value="" disabled selected>Select a team</option>';
+    names.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    });
+    // Restore previous selection if still valid
+    if (current && names.includes(current)) sel.value = current;
+  });
+  // Auto-select highlighted team as Team 1 and trigger opponent auto-fill
+  const team1Sel = document.getElementById("team1_name");
+  if (highlightedTeam && names.includes(highlightedTeam)) {
+    team1Sel.value = highlightedTeam;
+    team1Sel.dispatchEvent(new Event("change"));
+  }
 }
 
 
@@ -1032,9 +1071,9 @@ document.getElementById("add-player-form").addEventListener("submit", async (e) 
     msg.classList.remove("hidden");
     setTimeout(() => msg.classList.add("hidden"), 3000);
     loadAdminPlayers();
-    // Refresh the public Players tab list too
-    if (document.getElementById("tab-players").classList.contains("active")) {
-      loadPlayers();
+    // Refresh the public Teams tab (which now hosts the Registered Players list).
+    if (document.getElementById("tab-teams").classList.contains("active")) {
+      loadTeamsAndPlayers();
     }
   } catch (err) {
     showError("Failed to add player: " + err.message);
@@ -1085,8 +1124,8 @@ async function deletePlayer(playerId) {
       throw new Error(detail.detail || "Server error " + resp.status);
     }
     loadAdminPlayers();
-    if (document.getElementById("tab-players").classList.contains("active")) {
-      loadPlayers();
+    if (document.getElementById("tab-teams").classList.contains("active")) {
+      loadTeamsAndPlayers();
     }
   } catch (err) {
     showError("Failed to delete player: " + err.message);
@@ -1174,61 +1213,183 @@ document.getElementById("save-game-settings-btn").addEventListener("click", asyn
   }
 });
 
-// ── Team Highlight ────────────────────────────────────────────────────
+// ── Team / Player Highlight ───────────────────────────────────────────
+
+function _persistHighlightState() {
+  try {
+    if (highlightedTeam) {
+      localStorage.setItem(HIGHLIGHT_TEAM_KEY, highlightedTeam);
+    } else {
+      localStorage.removeItem(HIGHLIGHT_TEAM_KEY);
+    }
+    if (highlightedPlayer) {
+      localStorage.setItem(HIGHLIGHT_PLAYER_KEY, highlightedPlayer);
+    } else {
+      localStorage.removeItem(HIGHLIGHT_PLAYER_KEY);
+    }
+  } catch (_) {
+    // localStorage may be unavailable in private mode — silent fallback.
+  }
+}
+
+function _clearAllHighlightCheckboxes() {
+  document.querySelectorAll(".team-check, .player-check").forEach(cb => {
+    cb.checked = false;
+  });
+}
+
+function _syncHighlightCheckboxes() {
+  document.querySelectorAll(".team-check").forEach(cb => {
+    cb.checked = !!(highlightedTeam && cb.dataset.team === highlightedTeam);
+  });
+  document.querySelectorAll(".player-check").forEach(cb => {
+    cb.checked = !!(highlightedPlayer && cb.dataset.player === highlightedPlayer);
+  });
+}
 
 function applyTeamHighlight() {
   const cls = "team-highlight-text";
 
-  // Leaderboard — team name cell
-  document.querySelectorAll("#leaderboard-body tr").forEach(tr => {
-    const nameCell = tr.querySelector("td:nth-child(2)");
-    if (nameCell) nameCell.classList.toggle(cls, !!(highlightedTeam && nameCell.textContent === highlightedTeam));
-  });
+  // 1. Clear every existing highlight class before re-applying.
+  document.querySelectorAll("." + cls).forEach(el => el.classList.remove(cls));
 
-  // Heat matchup cards — .matchup-name spans
-  document.querySelectorAll(".matchup-name").forEach(el => {
-    el.classList.toggle(cls, !!(highlightedTeam && el.textContent === highlightedTeam));
-  });
+  // 2. Team-name glow. Matches team-name cells (team row, scoreboard row,
+  //    matches history, matchup cards, register-score <select>).
+  if (highlightedTeam) {
+    // Teams tab team-name cell
+    document.querySelectorAll("#teams-body .team-name-cell").forEach(el => {
+      if (el.dataset.team === highlightedTeam) el.classList.add(cls);
+    });
 
-  // Teams — team name cell
-  document.querySelectorAll("#teams-body tr").forEach(tr => {
-    const nameCell = tr.querySelector("td:nth-child(2)");
-    if (nameCell) nameCell.classList.toggle(cls, !!(highlightedTeam && nameCell.textContent === highlightedTeam));
-  });
+    // Leaderboard — team name is in col 2
+    document.querySelectorAll("#leaderboard-body tr").forEach(tr => {
+      const nameCell = tr.querySelector("td:nth-child(2)");
+      if (nameCell && nameCell.textContent === highlightedTeam) nameCell.classList.add(cls);
+    });
 
-  // Match history — team1 (col 1) and team2 (col 4)
-  document.querySelectorAll("#matches-body tr").forEach(tr => {
-    const t1 = tr.querySelector("td:nth-child(1)");
-    const t2 = tr.querySelector("td:nth-child(4)");
-    if (t1) t1.classList.toggle(cls, !!(highlightedTeam && t1.textContent === highlightedTeam));
-    if (t2) t2.classList.toggle(cls, !!(highlightedTeam && t2.textContent === highlightedTeam));
-  });
+    // Match history — team1 (col 1) and team2 (col 4)
+    document.querySelectorAll("#matches-body tr").forEach(tr => {
+      const t1 = tr.querySelector("td:nth-child(1)");
+      const t2 = tr.querySelector("td:nth-child(4)");
+      if (t1 && t1.textContent === highlightedTeam) t1.classList.add(cls);
+      if (t2 && t2.textContent === highlightedTeam) t2.classList.add(cls);
+    });
 
-  // Score dropdowns — highlight option text
-  ["team1_name", "team2_name"].forEach(id => {
-    const sel = document.getElementById(id);
-    if (sel) sel.classList.toggle(cls, !!(highlightedTeam && sel.value === highlightedTeam));
-  });
+    // Next-heat matchup cards
+    document.querySelectorAll(".matchup-name").forEach(el => {
+      if (el.textContent === highlightedTeam) el.classList.add(cls);
+    });
+
+    // Register Score dropdowns — glow the select when the active value matches
+    ["team1_name", "team2_name"].forEach(id => {
+      const sel = document.getElementById(id);
+      if (sel && sel.value === highlightedTeam) sel.classList.add(cls);
+    });
+  }
+
+  // 3. Player-name glow. Only individual member cells (never a whole team row)
+  //    and the Registered Players table row itself.
+  if (highlightedPlayer) {
+    document.querySelectorAll("#teams-body .team-member-name").forEach(el => {
+      if (el.dataset.player === highlightedPlayer) el.classList.add(cls);
+    });
+    document.querySelectorAll("#players-body .player-name-cell").forEach(el => {
+      if (el.dataset.player === highlightedPlayer) el.classList.add(cls);
+    });
+  }
 }
 
-// Event delegation for team checkboxes
-document.getElementById("teams-body").addEventListener("change", (e) => {
-  if (!e.target.classList.contains("team-check")) return;
-  const teamName = e.target.dataset.team;
-
-  if (e.target.checked) {
-    highlightedTeam = teamName;
-    // Uncheck all other checkboxes
-    document.querySelectorAll(".team-check").forEach(cb => {
-      if (cb !== e.target) cb.checked = false;
-    });
-  } else {
-    highlightedTeam = null;
-  }
+function _selectTeam(teamName) {
+  highlightedTeam = teamName || null;
+  highlightedPlayer = null;
+  _persistHighlightState();
+  _syncHighlightCheckboxes();
   applyTeamHighlight();
+}
+
+function _selectPlayer(playerName, teamName) {
+  highlightedPlayer = playerName || null;
+  highlightedTeam = teamName || null;
+  _persistHighlightState();
+  _syncHighlightCheckboxes();
+  applyTeamHighlight();
+}
+
+function _clearHighlights() {
+  highlightedTeam = null;
+  highlightedPlayer = null;
+  _persistHighlightState();
+  _clearAllHighlightCheckboxes();
+  applyTeamHighlight();
+}
+
+// Event delegation for team + player checkboxes — mutual exclusion across
+// both sets, with the player→team auto-resolve rule.
+document.getElementById("teams-body").addEventListener("change", (e) => {
+  const target = e.target;
+  if (target.classList.contains("team-check")) {
+    if (target.checked) {
+      _selectTeam(target.dataset.team);
+    } else {
+      // Any uncheck clears both highlights (simple model per spec).
+      _clearHighlights();
+    }
+  }
 });
+
+document.getElementById("players-body").addEventListener("change", (e) => {
+  const target = e.target;
+  if (!target.classList.contains("player-check")) return;
+  if (target.checked) {
+    const playerName = target.dataset.player;
+    // Prefer the fresh cache over the dataset, which could be stale if the
+    // player was reassigned between renders. Fall back to the dataset.
+    const fromCache = (playersCache || []).find(p => p.name === playerName);
+    let teamName = target.dataset.team || "";
+    if (fromCache) {
+      teamName = _teamNameByPlayerId(teamsCache || [], fromCache.team_id);
+    }
+    _selectPlayer(playerName, teamName);
+  } else {
+    _clearHighlights();
+  }
+});
+
+function _restoreHighlightFromStorage() {
+  let cachedTeam = null;
+  let cachedPlayer = null;
+  try {
+    cachedTeam = localStorage.getItem(HIGHLIGHT_TEAM_KEY);
+    cachedPlayer = localStorage.getItem(HIGHLIGHT_PLAYER_KEY);
+  } catch (_) {
+    return;
+  }
+  if (!cachedTeam && !cachedPlayer) return;
+
+  const teamNames = (teamsCache || []).map(t => t.name);
+  const playerNames = (playersCache || []).map(p => p.name);
+
+  // Self-heal: if either cached value is missing from the current roster,
+  // wipe both and exit (post-CSV-upload recovery path).
+  const teamStillThere = !cachedTeam || teamNames.includes(cachedTeam);
+  const playerStillThere = !cachedPlayer || playerNames.includes(cachedPlayer);
+  if (!teamStillThere || !playerStillThere) {
+    _clearHighlights();
+    return;
+  }
+
+  if (cachedPlayer) {
+    const playerRecord = (playersCache || []).find(p => p.name === cachedPlayer);
+    const resolvedTeam = playerRecord
+      ? _teamNameByPlayerId(teamsCache || [], playerRecord.team_id)
+      : "";
+    _selectPlayer(cachedPlayer, resolvedTeam);
+  } else if (cachedTeam) {
+    _selectTeam(cachedTeam);
+  }
+}
 
 // Initial load
 startHeatPolling();
-populateTeamDropdowns();
 loadCurrentHeat();
+loadTeamsAndPlayers().then(_restoreHighlightFromStorage);

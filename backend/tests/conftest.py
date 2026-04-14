@@ -36,7 +36,17 @@ class FakeContainer:
         # Simple filter: return all items for the default tournament
         if "SELECT c.id FROM c" in query:
             return [{"id": item["id"]} for item in self._items.values()]
-        return list(self._items.values())
+
+        # Honor @id and @team_id parameters used by the Phase 3 DAL queries.
+        # Real Cosmos honors the WHERE clause; the fake must too for the DAL
+        # tests that rely on point lookups.
+        params = {p["name"]: p.get("value") for p in (parameters or [])}
+        items: list[dict[str, Any]] = list(self._items.values())
+        if "@id" in params:
+            items = [i for i in items if i.get("id") == params["@id"]]
+        if "@team_id" in params:
+            items = [i for i in items if i.get("team_id") == params["@team_id"]]
+        return items
 
     def delete_item(
         self, item: str | dict[str, object], partition_key: str | object, **kwargs: object

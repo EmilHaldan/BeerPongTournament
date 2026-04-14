@@ -96,20 +96,33 @@ class HeatInfo(BaseModel):
 
 
 class TeamCreate(BaseModel):
-    """Payload for creating a new team."""
+    """Payload for creating a new team.
+
+    Phase 3: the ``members`` field of raw strings is replaced by ``member_ids``
+    — a list of ``Player.id`` references. Zero to three ids are permitted so
+    that admins can create an empty team awaiting assignment, or a 1-member
+    late-walk-in team. CSV uploads enforce the 2–3 member rule separately.
+    """
 
     name: str = Field(..., min_length=1, max_length=100, description="Team name")
-    members: list[str] = Field(
-        ..., min_length=2, max_length=3, description="List of team member names (2-3)"
+    member_ids: list[str] = Field(
+        default_factory=list,
+        max_length=3,
+        description="Player.id references; 0-3 permitted at the model level",
     )
 
 
 class Team(BaseModel):
-    """A persisted team."""
+    """A persisted team.
+
+    Phase 3: the legacy ``members: list[str]`` field is removed entirely. The
+    canonical roster lives in ``member_ids`` (Player.id references), and each
+    referenced Player carries a back-reference via ``Player.team_id``.
+    """
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
-    members: list[str]
+    member_ids: list[str] = Field(default_factory=list, max_length=3)
     created_at: str = Field(
         default_factory=lambda: datetime.now(UTC).isoformat(),
     )
@@ -130,13 +143,48 @@ class PlayerCreate(BaseModel):
 
 
 class Player(BaseModel):
-    """A persisted player."""
+    """A persisted player.
+
+    Phase 3: ``team_id`` is a scalar back-reference to the Team a player is on.
+    ``None`` means unassigned. The canonical roster is ``Team.member_ids``;
+    this field is the maintained inverse for O(1) lookups.
+    """
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
+    team_id: str | None = None
     created_at: str = Field(
         default_factory=lambda: datetime.now(UTC).isoformat(),
     )
     tournament_id: str = Field(default="default", alias="tournamentId")
 
     model_config = {"populate_by_name": True}
+
+
+class PlayerTeamAssignment(BaseModel):
+    """Payload for assigning (or un-assigning) a player to/from a team."""
+
+    team_id: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# CSV import models
+# ---------------------------------------------------------------------------
+
+
+class ImportError(BaseModel):  # noqa: N818 - domain name, not a Python exception
+    """A single validation error encountered while parsing an import CSV."""
+
+    row: int
+    reason: str
+
+
+class ImportSummary(BaseModel):
+    """Outcome of a CSV upload — real or dry-run."""
+
+    created_teams: list[str] = Field(default_factory=list)
+    created_players: list[str] = Field(default_factory=list)
+    skipped: list[str] = Field(default_factory=list)
+    replaced_count: int = 0
+    errors: list[ImportError] = Field(default_factory=list)
+    dry_run: bool

@@ -10,7 +10,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from beerpong_api.api.routes import router
-from beerpong_api.dal.teams import load_teams_from_csv
 from beerpong_api.db.client import init_db, init_local_db
 from beerpong_api.settings import get_settings
 
@@ -24,13 +23,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         init_local_db()
         print("  ⚡ Using local SQLite database (beerpong_local.db)")
-
-    # Auto-load teams from CSV file shipped alongside the backend
-    result = load_teams_from_csv(settings.TEAMS_CSV_PATH)
-    if result["created"]:
-        print(f"  📋 Loaded {len(result['created'])} team(s) from {settings.TEAMS_CSV_PATH}")
-    if result["skipped"]:
-        print(f"  ⏭️  Skipped {len(result['skipped'])} already-existing team(s)")
     yield
 
 

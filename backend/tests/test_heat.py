@@ -434,36 +434,47 @@ def test_scheduler_unconstrained_without_last_heat_keeps_round_robin() -> None:
     assert data["teams_sitting_out"] == []
 
 
-def test_post_tables_rejects_less_than_half_teams() -> None:
-    """POST /heat/tables must reject counts that can't fit half the teams."""
-    # Arrange – register 11 teams
-    for i in range(1, 12):
+def test_post_tables_rejects_when_sit_out_longer_than_one_heat() -> None:
+    """POST /heat/tables rejects counts where a team would sit two heats in a row.
+
+    Rule: tables * 4 >= teams_count. Each heat seats 2*tables teams; sitters
+    total (teams - 2*tables). For every sitter to get into the next heat, we
+    need sitters <= 2*tables, i.e. teams <= 4*tables.
+    """
+    # Arrange – 9 teams
+    for i in range(1, 10):
         _register_team(f"Team{i:02d}", [f"P{i}A", f"P{i}B"])
 
-    # Act / Assert – 4 tables cannot cover 11 teams (need at least 6)
-    resp_four = client.post(
+    # 2 tables is invalid (2*4=8 < 9) — user's example of a broken config.
+    resp_two = client.post(
         "/heat/tables",
-        json={"count": 4},
+        json={"count": 2},
         headers={"X-Admin-Token": ADMIN_TOKEN},
     )
-    assert resp_four.status_code == 400
+    assert resp_two.status_code == 400
 
-    # 5 tables is still too few (10 < 11)
-    resp_five = client.post(
+    # 3 tables is the threshold (3*4=12 >= 9).
+    resp_three = client.post(
         "/heat/tables",
-        json={"count": 5},
+        json={"count": 3},
         headers={"X-Admin-Token": ADMIN_TOKEN},
     )
-    assert resp_five.status_code == 400
+    assert resp_three.status_code == 200
+    assert resp_three.json()["tables"] == 3
 
-    # 6 tables is enough (12 >= 11)
-    resp_six = client.post(
+
+def test_post_tables_accepts_four_to_one_ratio() -> None:
+    """6 teams + 2 tables is allowed: 2*4=8 >= 6 — user's explicit OK example."""
+    for i in range(1, 7):
+        _register_team(f"Team{i:02d}", [f"P{i}A", f"P{i}B"])
+
+    resp = client.post(
         "/heat/tables",
-        json={"count": 6},
+        json={"count": 2},
         headers={"X-Admin-Token": ADMIN_TOKEN},
     )
-    assert resp_six.status_code == 200
-    assert resp_six.json()["tables"] == 6
+    assert resp.status_code == 200
+    assert resp.json()["tables"] == 2
 
 
 def test_start_next_heat_accepts_last_heat_flag() -> None:

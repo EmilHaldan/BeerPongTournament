@@ -288,9 +288,11 @@ def set_tables_route(
 ) -> HeatInfo:
     """Set the number of physical tables available (admin only).
 
-    Rejects counts below 1 or counts too low to seat half of the registered
-    teams (``count * 2 < len(team_names)``) – there's no point letting the
-    admin pick a value that cannot schedule a playable heat.
+    Rejects counts below 1 or counts too low to prevent a team from sitting
+    out two heats in a row (``count * 4 < len(team_names)``). Each heat seats
+    ``2 * count`` teams; sitters total ``teams - 2 * count``. For every sitter
+    to fit in the next heat, we need ``sitters <= 2 * count``, i.e.
+    ``teams <= 4 * count``.
     """
     settings = get_settings()
     if x_admin_token != settings.ADMIN_TOKEN:
@@ -299,12 +301,12 @@ def set_tables_route(
     if count is None or count < 1:
         raise HTTPException(status_code=400, detail="Tables count must be at least 1")
     team_names = get_team_names()
-    if count * 2 < len(team_names):
+    if count * 4 < len(team_names):
         raise HTTPException(
             status_code=400,
             detail=(
-                "Tables count must allow at least half of registered teams to play "
-                "(need tables >= ceil(teams / 2))"
+                "Tables count too low: a team would sit out two heats in a row. "
+                "Need tables >= ceil(teams / 4)."
             ),
         )
     return set_tables(count)

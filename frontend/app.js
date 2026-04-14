@@ -1105,6 +1105,22 @@ function parsePositiveInt(raw) {
   return n;
 }
 
+function setGameSettingsFeedback(msg, kind) {
+  const el = document.getElementById("game-settings-feedback");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("hidden", "error", "success");
+  el.classList.add(kind);
+  if (kind === "success") {
+    setTimeout(() => { el.classList.add("hidden"); }, 3000);
+  }
+}
+
+function clearGameSettingsFeedback() {
+  const el = document.getElementById("game-settings-feedback");
+  if (el) el.classList.add("hidden");
+}
+
 document.getElementById("save-game-settings-btn").addEventListener("click", async () => {
   const btn = document.getElementById("save-game-settings-btn");
   const minutesRaw = document.getElementById("timer-duration").value;
@@ -1113,12 +1129,14 @@ document.getElementById("save-game-settings-btn").addEventListener("click", asyn
   const minutes = parsePositiveInt(minutesRaw);
   const tables = parsePositiveInt(tablesRaw);
 
+  clearGameSettingsFeedback();
+
   if (minutes === null) {
-    showError("Match duration must be a whole number of minutes (1 or more)");
+    setGameSettingsFeedback("Match duration must be a whole number of minutes (1 or more)", "error");
     return;
   }
   if (tables === null) {
-    showError("Tables must be a whole number (1 or more)");
+    setGameSettingsFeedback("Tables must be a whole number (1 or more)", "error");
     return;
   }
 
@@ -1149,9 +1167,10 @@ document.getElementById("save-game-settings-btn").addEventListener("click", asyn
     }
 
     btn.textContent = "Saved!";
+    setGameSettingsFeedback("Game settings saved.", "success");
     setTimeout(() => { btn.textContent = "Save Game Settings"; }, 2000);
   } catch (err) {
-    showError("Failed to save game settings: " + err.message);
+    setGameSettingsFeedback(err.message, "error");
   }
 });
 

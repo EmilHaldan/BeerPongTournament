@@ -3,7 +3,7 @@ name = "beerpong-api"
 version = "0.4.0"
 description = "Beer Pong Tournament API – FastAPI backend"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
@@ -26,7 +26,7 @@ packages = ["src/beerpong_api"]
 # basedpyright
 # ---------------------------------------------------------------------------
 [tool.basedpyright]
-pythonVersion = "3.13"
+pythonVersion = "3.12"
 typeCheckingMode = "standard"
 include = ["src"]
 exclude = ["tests"]

@@ -67,7 +67,7 @@ resource "azurerm_cosmosdb_sql_container" "matches" {
   resource_group_name = azurerm_resource_group.main.name
   account_name        = azurerm_cosmosdb_account.db.name
   database_name       = azurerm_cosmosdb_sql_database.beerpong.name
-  partition_key_paths  = ["/tournamentId"]
+  partition_key_paths = ["/tournamentId"]
 }
 
 resource "azurerm_cosmosdb_sql_container" "teams" {
@@ -75,7 +75,15 @@ resource "azurerm_cosmosdb_sql_container" "teams" {
   resource_group_name = azurerm_resource_group.main.name
   account_name        = azurerm_cosmosdb_account.db.name
   database_name       = azurerm_cosmosdb_sql_database.beerpong.name
-  partition_key_paths  = ["/tournamentId"]
+  partition_key_paths = ["/tournamentId"]
+}
+
+resource "azurerm_cosmosdb_sql_container" "state" {
+  name                = "state"
+  resource_group_name = azurerm_resource_group.main.name
+  account_name        = azurerm_cosmosdb_account.db.name
+  database_name       = azurerm_cosmosdb_sql_database.beerpong.name
+  partition_key_paths = ["/tournamentId"]
 }
 
 # ── Container Registry ────────────────────────────────────────────────

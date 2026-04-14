@@ -279,6 +279,24 @@ tbody tr:hover {
   text-align: center;
 }
 
+.inline-feedback {
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.inline-feedback.error {
+  background: var(--error);
+  color: #fff;
+}
+
+.inline-feedback.success {
+  background: var(--success);
+  color: #fff;
+}
+
 .hidden {
   display: none;
 }

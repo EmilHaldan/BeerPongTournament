@@ -67,6 +67,13 @@ class SqliteContainer:
         if "SELECT c.id FROM c" in query:
             return [{"id": doc["id"]} for doc in docs]
 
+        # Honor @id and @team_id parameters (Phase 3 DAL point lookups).
+        params = {p["name"]: p.get("value") for p in (parameters or [])}
+        if "@id" in params:
+            docs = [d for d in docs if d.get("id") == params["@id"]]
+        if "@team_id" in params:
+            docs = [d for d in docs if d.get("team_id") == params["@team_id"]]
+
         # For "ORDER BY c.created_at DESC" – sort in Python
         if "ORDER BY c.created_at DESC" in query:
             docs.sort(key=lambda d: d.get("created_at", ""), reverse=True)

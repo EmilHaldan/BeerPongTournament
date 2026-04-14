@@ -5,7 +5,7 @@ All routes delegate to DAL functions – they never access the DB client directl
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 
 from beerpong_api.dal.heat import (
     advance_heat,
@@ -17,21 +17,38 @@ from beerpong_api.dal.heat import (
 )
 from beerpong_api.dal.leaderboard import compute_leaderboard
 from beerpong_api.dal.matches import delete_match, insert_match, list_matches, reset_matches
-from beerpong_api.dal.players import create_player, delete_player, list_players
-from beerpong_api.dal.teams import create_team, delete_team, get_team_names, list_teams
+from beerpong_api.dal.players import (
+    assign_player_to_team,
+    create_player,
+    delete_player,
+    list_players,
+)
+from beerpong_api.dal.teams import (
+    create_team,
+    delete_team,
+    get_team_names,
+    list_teams,
+    replace_all_teams_and_players_from_csv,
+)
 from beerpong_api.db.models import (
     HeatInfo,
+    ImportSummary,
     LeaderboardEntry,
     MatchCreate,
     MatchResult,
     Player,
     PlayerCreate,
+    PlayerTeamAssignment,
     Team,
     TeamCreate,
 )
 from beerpong_api.settings import get_settings
 
 router = APIRouter()
+
+# 256 KiB upload cap for the CSV uploader — rejects obvious wrong-file cases
+# (photos, Excel binaries) while leaving ample headroom for large rosters.
+_MAX_UPLOAD_BYTES = 256 * 1024
 
 
 @router.get("/health")
@@ -117,11 +134,19 @@ def add_team(
     payload: TeamCreate,
     x_admin_token: str = Header(..., alias="X-Admin-Token"),
 ) -> Team:
-    """Create a new team (admin only)."""
+    """Create a new team (admin only).
+
+    Accepts the Phase 3 ``TeamCreate`` shape (name + optional member_ids).
+    When any member_id does not resolve to an existing player, the DAL raises
+    ``ValueError`` and this endpoint returns HTTP 400.
+    """
     settings = get_settings()
     if x_admin_token != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid admin token")
-    return create_team(payload)
+    try:
+        return create_team(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete("/teams/{team_id}", status_code=200)
@@ -129,7 +154,11 @@ def remove_team(
     team_id: str,
     x_admin_token: str = Header(..., alias="X-Admin-Token"),
 ) -> dict[str, str]:
-    """Delete a team by ID (admin only)."""
+    """Delete a team by ID (admin only).
+
+    Players attached to the team are detached (their ``team_id`` is cleared)
+    before the team document is removed. Players survive.
+    """
     settings = get_settings()
     if x_admin_token != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid admin token")
@@ -142,6 +171,65 @@ def remove_team(
 def get_names() -> list[str]:
     """Return a sorted list of registered team names (for dropdowns)."""
     return get_team_names()
+
+
+@router.post("/admin/teams/upload-csv", response_model=ImportSummary, status_code=200)
+async def upload_teams_csv(
+    file: UploadFile = File(...),  # noqa: B008
+    dry_run: bool = False,
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> ImportSummary:
+    """Upload a team roster CSV (admin only).
+
+    Strict all-or-nothing replacement semantics: when validation passes (and
+    ``dry_run=False``) every team, player, match, and piece of heat/tournament
+    state is wiped before the CSV is materialised under the new dual-write
+    model. Validation failures return 400 with the full per-row error list so
+    the frontend can surface each problem.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+
+    # Size cap enforced server-side — upload.size is populated by FastAPI's
+    # multipart parser when the Content-Length is known.
+    if file.size is not None and file.size > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large: {_MAX_UPLOAD_BYTES // 1024} KiB max",
+        )
+
+    raw = await file.read()
+    # Belt-and-braces: re-check after the actual read in case size was missing.
+    if len(raw) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large: {_MAX_UPLOAD_BYTES // 1024} KiB max",
+        )
+
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Can't ingest malformed CSV file",
+                "errors": [{"row": 0, "reason": "file is not valid UTF-8"}],
+            },
+        ) from exc
+
+    summary = replace_all_teams_and_players_from_csv(content, dry_run=dry_run)
+
+    if summary.errors:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Can't ingest malformed CSV file",
+                "errors": [e.model_dump() for e in summary.errors],
+            },
+        )
+
+    return summary
 
 
 # ── Players ───────────────────────────────────────────────────────────
@@ -170,13 +258,38 @@ def remove_player(
     player_id: str,
     x_admin_token: str = Header(..., alias="X-Admin-Token"),
 ) -> dict[str, str]:
-    """Delete a player by ID (admin only)."""
+    """Delete a player by ID (admin only).
+
+    If the player is on a team, their id is removed from that team's
+    ``member_ids`` before the player document is deleted.
+    """
     settings = get_settings()
     if x_admin_token != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid admin token")
     if not delete_player(player_id):
         raise HTTPException(status_code=404, detail="Player not found")
     return {"status": "deleted", "id": player_id}
+
+
+@router.post("/players/{player_id}/team", response_model=Player, status_code=200)
+def assign_team_to_player(
+    player_id: str,
+    payload: PlayerTeamAssignment,
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> Player:
+    """Assign (or un-assign) a player to a team (admin only).
+
+    The DAL maintains the dual-write invariant: old team's ``member_ids`` is
+    updated, new team's ``member_ids`` is updated, and the player's
+    ``team_id`` is refreshed in one logical operation.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    try:
+        return assign_player_to_team(player_id, payload.team_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ── Admin ─────────────────────────────────────────────────────────────

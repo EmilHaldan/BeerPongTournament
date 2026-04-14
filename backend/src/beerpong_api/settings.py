@@ -30,7 +30,6 @@ class Settings:
         self.ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "changeme")
         cors_raw = os.environ.get("CORS_ORIGINS", "*")
         self.CORS_ORIGINS = [o.strip() for o in cors_raw.split(",")]
-        self.TEAMS_CSV_PATH = os.environ.get("TEAMS_CSV_PATH", "teams.csv")
 
     @property
     def is_cosmos_configured(self) -> bool:

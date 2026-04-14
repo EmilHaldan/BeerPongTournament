@@ -943,6 +943,9 @@ document.getElementById("admin-login-btn").addEventListener("click", async () =>
     document.getElementById("admin-login").classList.add("hidden");
     document.getElementById("admin-panel").classList.remove("hidden");
     loadAdminHeatInfo();
+    // Prime the public cache first so the admin render helpers can resolve
+    // player-id → name and player team_id → team-name without racing.
+    await loadTeamsAndPlayers();
     loadAdminTeams();
     loadAdminPlayers();
   } catch (err) {
@@ -958,28 +961,22 @@ document.getElementById("admin-pin").addEventListener("keydown", (e) => {
   }
 });
 
-// ── Admin: Add Team ───────────────────────────────────────────────────
+// ── Admin: Create Team ────────────────────────────────────────────────
 
 document.getElementById("add-team-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = document.getElementById("new-team-name").value.trim();
-  const m1 = document.getElementById("new-team-member1").value.trim();
-  const m2 = document.getElementById("new-team-member2").value.trim();
-  const m3 = document.getElementById("new-team-member3").value.trim();
 
-  if (!name || !m1 || !m2) {
-    showError("Team name and at least 2 members are required");
+  if (!name) {
+    showError("Team name is required");
     return;
   }
-
-  const members = [m1, m2];
-  if (m3) members.push(m3);
 
   try {
     const resp = await fetch(API_BASE_URL + "/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
-      body: JSON.stringify({ name, members }),
+      body: JSON.stringify({ name, member_ids: [] }),
     });
     if (!resp.ok) {
       const detail = await resp.json().catch(() => ({}));
@@ -989,9 +986,12 @@ document.getElementById("add-team-form").addEventListener("submit", async (e) =>
     const msg = document.getElementById("add-team-success");
     msg.classList.remove("hidden");
     setTimeout(() => msg.classList.add("hidden"), 3000);
+    // Refresh the public cache so name/id lookups stay in sync, then
+    // re-render the admin table.
+    await loadTeamsAndPlayers();
     loadAdminTeams();
   } catch (err) {
-    showError("Failed to add team: " + err.message);
+    showError("Failed to create team: " + err.message);
   }
 });
 
@@ -1016,13 +1016,26 @@ function renderAdminTeams(teams) {
   }
   tbody.innerHTML = teams
     .map(
-      (t, i) => `
+      (t, i) => {
+        const memberIds = t.member_ids || [];
+        let membersCell;
+        if (memberIds.length === 0) {
+          membersCell = '<span class="muted">&mdash; (no members)</span>';
+        } else {
+          const names = memberIds
+            .map((pid) => _playerNameById(playersCache || [], pid))
+            .filter((n) => n.length > 0)
+            .map(escapeHtml);
+          membersCell = names.join(", ");
+        }
+        return `
     <tr>
       <td>${i + 1}</td>
       <td>${escapeHtml(t.name)}</td>
-      <td>${t.members.map(escapeHtml).join(", ")}</td>
+      <td>${membersCell}</td>
       <td><button class="btn-delete" onclick="deleteTeam('${t.id}')">✕</button></td>
-    </tr>`
+    </tr>`;
+      }
     )
     .join("");
 }
@@ -1039,7 +1052,10 @@ async function deleteTeam(teamId) {
       const detail = await resp.json().catch(() => ({}));
       throw new Error(detail.detail || "Server error " + resp.status);
     }
+    // Detach cascades to players — refresh every roster-backed view.
+    await loadTeamsAndPlayers();
     loadAdminTeams();
+    loadAdminPlayers();
   } catch (err) {
     showError("Failed to delete team: " + err.message);
   }
@@ -1096,17 +1112,28 @@ async function loadAdminPlayers() {
 function renderAdminPlayers(players) {
   const tbody = document.getElementById("admin-players-body");
   if (players.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="empty-msg">No players yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-msg">No players yet</td></tr>';
     return;
   }
   tbody.innerHTML = players
     .map(
-      (p, i) => `
+      (p, i) => {
+        const teamName = _teamNameByPlayerId(teamsCache || [], p.team_id);
+        const teamCell = p.team_id
+          ? escapeHtml(teamName || "(unknown)")
+          : '<span class="muted">Unassigned</span>';
+        const currentTeamAttr = p.team_id ? escapeHtml(p.team_id) : "";
+        return `
     <tr>
       <td>${i + 1}</td>
       <td>${escapeHtml(p.name)}</td>
-      <td><button class="btn-delete" onclick="deletePlayer('${p.id}')">✕</button></td>
-    </tr>`
+      <td>${teamCell}</td>
+      <td class="admin-player-actions">
+        <button class="btn-assign" data-player-id="${escapeHtml(p.id)}" data-player-name="${escapeHtml(p.name)}" data-current-team-id="${currentTeamAttr}">Assign Team</button>
+        <button class="btn-delete" onclick="deletePlayer('${p.id}')">&#10005;</button>
+      </td>
+    </tr>`;
+      }
     )
     .join("");
 }
@@ -1123,10 +1150,11 @@ async function deletePlayer(playerId) {
       const detail = await resp.json().catch(() => ({}));
       throw new Error(detail.detail || "Server error " + resp.status);
     }
+    // Deleting a player also strips them from their team's member_ids, so
+    // the admin Teams view needs the refresh too.
+    await loadTeamsAndPlayers();
     loadAdminPlayers();
-    if (document.getElementById("tab-teams").classList.contains("active")) {
-      loadTeamsAndPlayers();
-    }
+    loadAdminTeams();
   } catch (err) {
     showError("Failed to delete player: " + err.message);
   }
@@ -1388,6 +1416,325 @@ function _restoreHighlightFromStorage() {
     _selectTeam(cachedTeam);
   }
 }
+
+// ── Admin: Assign Team modal ──────────────────────────────────────────
+
+// Captures the player currently being assigned. Null when the modal is idle.
+let assignModalPlayerId = null;
+
+function _setAssignModalFeedback(msg, kind) {
+  const el = document.getElementById("assign-modal-feedback");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("hidden", "error", "success");
+  el.classList.add(kind);
+}
+
+function _clearAssignModalFeedback() {
+  const el = document.getElementById("assign-modal-feedback");
+  if (el) {
+    el.classList.add("hidden");
+    el.textContent = "";
+  }
+}
+
+function _updateAssignModalTeamInfo() {
+  const sel = document.getElementById("assign-team-select");
+  const info = document.getElementById("assign-modal-team-info");
+  if (!sel || !info) return;
+  const teamId = sel.value;
+  if (!teamId) {
+    info.textContent = "";
+    return;
+  }
+  const team = (teamsCache || []).find((t) => t.id === teamId);
+  if (!team) {
+    info.textContent = "";
+    return;
+  }
+  const count = (team.member_ids || []).length;
+  const noun = count === 1 ? "member" : "members";
+  info.textContent = `${team.name} currently has ${count} ${noun}`;
+}
+
+function openAssignTeamModal(playerId, playerName, currentTeamId) {
+  assignModalPlayerId = playerId;
+
+  const nameEl = document.getElementById("assign-modal-player-name");
+  if (nameEl) nameEl.textContent = playerName || "Player";
+
+  const sel = document.getElementById("assign-team-select");
+  if (sel) {
+    const teams = (teamsCache || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    const opts = ['<option value="">Unassigned</option>'].concat(
+      teams.map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`)
+    );
+    sel.innerHTML = opts.join("");
+    sel.value = currentTeamId || "";
+  }
+
+  _clearAssignModalFeedback();
+  _updateAssignModalTeamInfo();
+
+  const modal = document.getElementById("assign-team-modal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeAssignTeamModal() {
+  assignModalPlayerId = null;
+  const modal = document.getElementById("assign-team-modal");
+  if (modal) modal.classList.add("hidden");
+  _clearAssignModalFeedback();
+}
+
+// Delegated click handler for the per-row "Assign Team" buttons in the
+// Manage Players table. Delegation beats re-binding after every render.
+document.getElementById("admin-players-body").addEventListener("click", (e) => {
+  const btn = e.target.closest(".btn-assign");
+  if (!btn) return;
+  const playerId = btn.dataset.playerId || "";
+  const playerName = btn.dataset.playerName || "";
+  const currentTeamId = btn.dataset.currentTeamId || "";
+  if (!playerId) return;
+  openAssignTeamModal(playerId, playerName, currentTeamId);
+});
+
+document.getElementById("assign-team-select").addEventListener("change", _updateAssignModalTeamInfo);
+
+document.getElementById("assign-team-cancel").addEventListener("click", () => {
+  closeAssignTeamModal();
+});
+
+document.getElementById("assign-team-save").addEventListener("click", async () => {
+  if (!assignModalPlayerId) return;
+  const sel = document.getElementById("assign-team-select");
+  const raw = sel ? sel.value : "";
+  const teamId = raw === "" ? null : raw;
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/players/" + assignModalPlayerId + "/team", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+      body: JSON.stringify({ team_id: teamId }),
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      const msg = typeof detail.detail === "string" ? detail.detail : "Server error " + resp.status;
+      _setAssignModalFeedback(msg, "error");
+      return;
+    }
+    closeAssignTeamModal();
+    await loadTeamsAndPlayers();
+    loadAdminTeams();
+    loadAdminPlayers();
+  } catch (err) {
+    _setAssignModalFeedback("Failed to assign team: " + err.message, "error");
+  }
+});
+
+// ── Admin: Roster CSV upload ──────────────────────────────────────────
+
+// The file reference held between preview and confirm.
+let pendingRosterFile = null;
+
+function _setRosterFeedback(msg, kind) {
+  const el = document.getElementById("roster-upload-feedback");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("hidden", "error", "success");
+  el.classList.add(kind);
+}
+
+function _clearRosterFeedback() {
+  const el = document.getElementById("roster-upload-feedback");
+  if (el) {
+    el.classList.add("hidden");
+    el.textContent = "";
+  }
+}
+
+function _renderRosterPreview(summary) {
+  const wrapper = document.getElementById("roster-preview");
+  const teamsList = document.getElementById("roster-preview-teams");
+  const playersList = document.getElementById("roster-preview-players");
+  const errorsWrap = document.getElementById("roster-preview-errors");
+  if (!wrapper || !teamsList || !playersList || !errorsWrap) return;
+
+  const teams = summary.created_teams || [];
+  const players = summary.created_players || [];
+  teamsList.innerHTML = teams.length
+    ? teams.map((n) => `<li>${escapeHtml(n)}</li>`).join("")
+    : '<li class="muted">None</li>';
+  playersList.innerHTML = players.length
+    ? players.map((n) => `<li>${escapeHtml(n)}</li>`).join("")
+    : '<li class="muted">None</li>';
+
+  const errorsUl = errorsWrap.querySelector("ul");
+  if (errorsUl) errorsUl.innerHTML = "";
+  errorsWrap.classList.add("hidden");
+
+  wrapper.classList.remove("hidden");
+}
+
+function _renderRosterErrors(errors) {
+  const wrapper = document.getElementById("roster-preview");
+  const errorsWrap = document.getElementById("roster-preview-errors");
+  const teamsList = document.getElementById("roster-preview-teams");
+  const playersList = document.getElementById("roster-preview-players");
+  if (!wrapper || !errorsWrap) return;
+  if (teamsList) teamsList.innerHTML = '<li class="muted">None</li>';
+  if (playersList) playersList.innerHTML = '<li class="muted">None</li>';
+  const ul = errorsWrap.querySelector("ul");
+  if (ul) {
+    ul.innerHTML = (errors || [])
+      .map((e) => `<li>Row ${e.row}: ${escapeHtml(e.reason)}</li>`)
+      .join("");
+  }
+  errorsWrap.classList.remove("hidden");
+  wrapper.classList.remove("hidden");
+}
+
+function _clearRosterPreview() {
+  const wrapper = document.getElementById("roster-preview");
+  if (wrapper) wrapper.classList.add("hidden");
+  const errorsWrap = document.getElementById("roster-preview-errors");
+  if (errorsWrap) errorsWrap.classList.add("hidden");
+}
+
+function _setConfirmEnabled(enabled) {
+  const btn = document.getElementById("roster-confirm-btn");
+  if (btn) btn.disabled = !enabled;
+}
+
+document.getElementById("roster-preview-btn").addEventListener("click", async () => {
+  const input = document.getElementById("roster-csv-file");
+  const file = input && input.files && input.files[0] ? input.files[0] : null;
+
+  if (!file) {
+    _setRosterFeedback("Select a CSV file first.", "error");
+    _setConfirmEnabled(false);
+    return;
+  }
+
+  _clearRosterFeedback();
+  _clearRosterPreview();
+  _setConfirmEnabled(false);
+
+  const fd = new FormData();
+  fd.append("file", file);
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/admin/teams/upload-csv?dry_run=true", {
+      method: "POST",
+      headers: { "X-Admin-Token": adminToken },
+      body: fd,
+    });
+
+    if (resp.status === 413) {
+      _setRosterFeedback("File too large (256 KiB max)", "error");
+      pendingRosterFile = null;
+      return;
+    }
+
+    if (resp.status === 400) {
+      const detail = await resp.json().catch(() => ({}));
+      const body = detail && detail.detail ? detail.detail : {};
+      const rowErrors = Array.isArray(body.errors) ? body.errors : [];
+      _setRosterFeedback("Can't ingest malformed CSV file", "error");
+      _renderRosterErrors(rowErrors);
+      pendingRosterFile = null;
+      return;
+    }
+
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      const msg =
+        typeof detail.detail === "string" ? detail.detail : "Server error " + resp.status;
+      _setRosterFeedback(msg, "error");
+      pendingRosterFile = null;
+      return;
+    }
+
+    const summary = await resp.json();
+    _renderRosterPreview(summary);
+    pendingRosterFile = file;
+    _setConfirmEnabled(true);
+    _setRosterFeedback(
+      "Preview OK. Review the lists, then press Confirm replacement to wipe and import.",
+      "success"
+    );
+  } catch (err) {
+    _setRosterFeedback("Upload failed: " + err.message, "error");
+    pendingRosterFile = null;
+  }
+});
+
+document.getElementById("roster-confirm-btn").addEventListener("click", async () => {
+  if (!pendingRosterFile) {
+    _setRosterFeedback("Upload and preview a file first.", "error");
+    return;
+  }
+  if (!confirm("Replace the entire roster? This wipes teams, players, matches, and heat state.")) {
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append("file", pendingRosterFile);
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/admin/teams/upload-csv", {
+      method: "POST",
+      headers: { "X-Admin-Token": adminToken },
+      body: fd,
+    });
+
+    if (resp.status === 413) {
+      _setRosterFeedback("File too large (256 KiB max)", "error");
+      return;
+    }
+
+    if (resp.status === 400) {
+      const detail = await resp.json().catch(() => ({}));
+      const body = detail && detail.detail ? detail.detail : {};
+      const rowErrors = Array.isArray(body.errors) ? body.errors : [];
+      _setRosterFeedback("Can't ingest malformed CSV file", "error");
+      _renderRosterErrors(rowErrors);
+      return;
+    }
+
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      const msg =
+        typeof detail.detail === "string" ? detail.detail : "Server error " + resp.status;
+      _setRosterFeedback(msg, "error");
+      return;
+    }
+
+    const summary = await resp.json();
+    const teamCount = (summary.created_teams || []).length;
+    const playerCount = (summary.created_players || []).length;
+    _setRosterFeedback(
+      `Roster replaced. ${teamCount} teams and ${playerCount} players created.`,
+      "success"
+    );
+    _clearRosterPreview();
+    pendingRosterFile = null;
+    _setConfirmEnabled(false);
+    const input = document.getElementById("roster-csv-file");
+    if (input) input.value = "";
+
+    // Refresh every cache-backed view since everything was just replaced.
+    await loadTeamsAndPlayers();
+    loadAdminTeams();
+    loadAdminPlayers();
+    loadAdminHeatInfo();
+    loadMatches();
+    loadLeaderboard();
+    loadHeatInfo();
+  } catch (err) {
+    _setRosterFeedback("Confirm failed: " + err.message, "error");
+  }
+});
 
 // Initial load
 startHeatPolling();

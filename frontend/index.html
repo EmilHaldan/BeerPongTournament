@@ -206,6 +206,33 @@
       <div id="admin-panel" class="admin-panel hidden">
         <h2>Admin Panel</h2>
 
+        <!-- Team Roster Upload -->
+        <div class="admin-section">
+          <h3>Team Roster Upload</h3>
+          <div class="caution-banner">
+            CAUTION: this will remove all user data and reset the tournament!
+          </div>
+          <div class="form-group">
+            <label for="roster-csv-file">CSV file (team_name, player1, player2, optional player3)</label>
+            <input type="file" id="roster-csv-file" accept=".csv,text/csv" />
+          </div>
+          <div class="form-row">
+            <button id="roster-preview-btn" class="btn secondary">Upload and preview</button>
+            <button id="roster-confirm-btn" class="btn primary" disabled>Confirm replacement</button>
+          </div>
+          <div id="roster-upload-feedback" class="inline-feedback hidden"></div>
+          <div id="roster-preview" class="roster-preview hidden">
+            <h4>Preview</h4>
+            <ul id="roster-preview-teams"></ul>
+            <h4>Players to create</h4>
+            <ul id="roster-preview-players"></ul>
+            <div id="roster-preview-errors" class="roster-preview-errors hidden">
+              <h4>Errors</h4>
+              <ul></ul>
+            </div>
+          </div>
+        </div>
+
         <!-- Heat Management -->
         <div class="admin-section">
           <h3>Heat Management</h3>
@@ -224,29 +251,18 @@
           </label>
         </div>
 
-        <!-- Add Team -->
+        <!-- Create Team -->
         <div class="admin-section">
-          <h3>Add Team</h3>
+          <h3>Create Team</h3>
           <form id="add-team-form">
             <div class="form-group">
               <label for="new-team-name">Team Name</label>
               <input type="text" id="new-team-name" placeholder="e.g. The Chuggers" required />
             </div>
-            <div class="form-group">
-              <label for="new-team-member1">Member 1</label>
-              <input type="text" id="new-team-member1" placeholder="Name" required />
-            </div>
-            <div class="form-group">
-              <label for="new-team-member2">Member 2</label>
-              <input type="text" id="new-team-member2" placeholder="Name" required />
-            </div>
-            <div class="form-group">
-              <label for="new-team-member3">Member 3 (optional)</label>
-              <input type="text" id="new-team-member3" placeholder="Name" />
-            </div>
-            <button type="submit" class="btn primary">Add Team</button>
+            <p class="muted form-hint">Players are added separately via Manage Players &rarr; Assign Team.</p>
+            <button type="submit" class="btn primary">Create Team</button>
           </form>
-          <div id="add-team-success" class="success-msg hidden">Team added! ✓</div>
+          <div id="add-team-success" class="success-msg hidden">Team created! ✓</div>
         </div>
 
         <!-- Manage Teams -->
@@ -290,12 +306,13 @@
               <tr>
                 <th>#</th>
                 <th>Name</th>
+                <th>Team</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="admin-players-body">
               <tr>
-                <td colspan="3" class="empty-msg">No players yet</td>
+                <td colspan="4" class="empty-msg">No players yet</td>
               </tr>
             </tbody>
           </table>
@@ -370,6 +387,25 @@
         <li>Ties are recorded but count as neither a win nor a loss</li>
       </ul>
     </section>
+
+    <!-- Assign Team modal -->
+    <div id="assign-team-modal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Assign <span id="assign-modal-player-name">Player</span> to a team</h3>
+        <div class="form-group">
+          <label for="assign-team-select">Team</label>
+          <select id="assign-team-select">
+            <option value="">Unassigned</option>
+          </select>
+        </div>
+        <p id="assign-modal-team-info" class="muted"></p>
+        <div id="assign-modal-feedback" class="inline-feedback hidden"></div>
+        <div class="modal-actions">
+          <button id="assign-team-cancel" class="btn secondary">Cancel</button>
+          <button id="assign-team-save" class="btn primary">Save</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Score animation overlay -->
     <div id="score-animation-overlay" class="score-animation hidden">

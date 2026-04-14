@@ -20,6 +20,7 @@
       <button class="tab" data-tab="register">Register Score</button>
       <button class="tab" data-tab="teams">Teams</button>
       <button class="tab" data-tab="matches">Matches</button>
+      <button class="tab" data-tab="rules">Rules</button>
       <button class="tab" data-tab="admin">Admin</button>
     </nav>
   </header>
@@ -263,6 +264,59 @@
       </div>
     </section>
 
+    <!-- Rules tab -->
+    <section id="tab-rules" class="tab-content">
+      <h2>Rules</h2>
+
+      <h3>The Setup</h3>
+      <ul>
+        <li>6 cups per side, arranged in a triangle rack</li>
+        <li>Cups are filled with beer (or water if preferred)</li>
+        <li>Tables should be roughly 8 feet long</li>
+      </ul>
+
+      <h3>Gameplay</h3>
+      <ul>
+        <li>Each team takes turns throwing 2 balls per turn (one per player)</li>
+        <li>If a ball lands in a cup, that cup is removed and the opposing team drinks it</li>
+        <li>Bounce shots count for 2 cups &mdash; but the defending team may swat them out of the air</li>
+        <li>If both players on a team hit cups on the same turn, they get the balls back for one extra throw ("balls back")</li>
+      </ul>
+
+      <h3>Re-racks</h3>
+      <ul>
+        <li>The defending team may request a re-rack when 6, 3, 2, or 1 cups remain</li>
+        <li>One re-rack per game per team unless house rules say otherwise</li>
+      </ul>
+
+      <h3>Island</h3>
+      <ul>
+        <li>A player may "call an island" on an isolated cup (not touching any other cup)</li>
+        <li>If the called cup is hit, it counts as 2 cups</li>
+        <li>If a different cup is hit instead, it does NOT count</li>
+      </ul>
+
+      <h3>Winning</h3>
+      <ul>
+        <li>First team to eliminate all the opponent's cups wins &mdash; subject to redemption</li>
+        <li>Redemption: after losing the last cup, the losing team gets one final turn. If they clear the remaining cups, the game goes to sudden-death with 3 cups each side</li>
+      </ul>
+
+      <h3>Fouls</h3>
+      <ul>
+        <li>Elbows must stay behind the edge of the table when throwing</li>
+        <li>Interfering with a ball in flight (other than swatting a bounce) is a foul &mdash; the opposing team may remove one of your cups</li>
+      </ul>
+
+      <h3>Tournament Format</h3>
+      <ul>
+        <li>Matches are organised into "heats" &mdash; a batch of parallel games</li>
+        <li>Each match is a single game, no best-of</li>
+        <li>Leaderboard tracks wins and total cups hit</li>
+        <li>Ties are recorded but count as neither a win nor a loss</li>
+      </ul>
+    </section>
+
     <!-- Score animation overlay -->
     <div id="score-animation-overlay" class="score-animation hidden">
       <div class="score-anim-content">
@@ -308,6 +362,10 @@
     <button class="tab" data-tab="matches">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       <span>History</span>
+    </button>
+    <button class="tab" data-tab="rules">
+      <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <span>Rules</span>
     </button>
     <button class="tab" data-tab="admin">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>

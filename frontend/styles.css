@@ -27,6 +27,31 @@ body {
   min-height: 100dvh;
 }
 
+/* ── Rules tab ──────────────────────────────────────────────────────── */
+
+#tab-rules {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+#tab-rules h3 {
+  margin-top: 1.5rem;
+  color: var(--accent);
+}
+
+#tab-rules ul,
+#tab-rules ol {
+  padding-left: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+#tab-rules li {
+  margin-bottom: 0.375rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+
 /* ── Header ─────────────────────────────────────────────────────────── */
 
 header {

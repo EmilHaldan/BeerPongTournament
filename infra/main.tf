@@ -78,6 +78,12 @@ resource "azurerm_cosmosdb_sql_container" "teams" {
   partition_key_paths = ["/tournamentId"]
 }
 
+# Import the state container which init_db() created at runtime before TF managed it.
+import {
+  to = azurerm_cosmosdb_sql_container.state
+  id = "${azurerm_cosmosdb_sql_database.beerpong.id}/containers/state"
+}
+
 resource "azurerm_cosmosdb_sql_container" "state" {
   name                = "state"
   resource_group_name = azurerm_resource_group.main.name

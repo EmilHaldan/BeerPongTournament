@@ -228,7 +228,8 @@ beerpong_local.db-shm
 # Claude Code local settings
 .claude/settings.local.json
 
-.claude/
+.claude/*
+!.claude/CLAUDE.md
 
 memory/
 

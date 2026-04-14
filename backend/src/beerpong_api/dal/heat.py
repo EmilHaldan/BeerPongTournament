@@ -11,13 +11,13 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from beerpong_api.dal.leaderboard import compute_leaderboard
-
-# Heat timer duration in seconds (10 minutes)
-HEAT_TIMER_SECONDS = 600
 from beerpong_api.dal.matches import list_matches
 from beerpong_api.dal.teams import get_team_names
 from beerpong_api.db.client import get_state_container
 from beerpong_api.db.models import HeatInfo, HeatMatchup, HeatState
+
+# Heat timer duration in seconds (10 minutes)
+HEAT_TIMER_SECONDS = 600
 
 
 def _get_heat_state() -> HeatState:
@@ -27,7 +27,7 @@ def _get_heat_state() -> HeatState:
         query="SELECT * FROM c WHERE c.tournamentId = 'default'",
         enable_cross_partition_query=False,
     )
-    for item in items:  # pyright: ignore[reportUnknownVariableType]
+    for item in items:  # pyright: ignore[reportUnknownVariableType, reportGeneralTypeIssues]
         if item.get("id") == "heat_state":  # pyright: ignore[reportUnknownMemberType]
             return HeatState(**item)  # pyright: ignore[reportUnknownArgumentType]
     return HeatState()

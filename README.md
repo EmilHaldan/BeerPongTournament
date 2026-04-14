@@ -16,7 +16,7 @@ A simple web app for tracking beer pong matches at a one-day tournament. Hosted 
 
 ```
 ├── backend/         Python 3.12 FastAPI API (uv, basedpyright, pytest, just)
-├── frontend/        Vanilla HTML/CSS/JS - 7 tabs (Next Heat, Scoreboard, Register Score, Teams, Players, Matches, Rules, Admin)
+├── frontend/        Vanilla HTML/CSS/JS - 7 tabs (Next Heat, Scoreboard, Register Score, Teams, Matches, Rules, Admin)
 ├── infra/           Terraform (Azure resources: RG, Cosmos, ACR, Container App, SWA)
 └── .github/workflows/
     ├── ci.yml       PR validation (ruff, basedpyright, pytest, terraform fmt + plan)
@@ -27,24 +27,28 @@ A simple web app for tracking beer pong matches at a one-day tournament. Hosted 
 **Cosmos containers (all partitioned on `/tournamentId`):**
 
 - `matches` - persisted match results
-- `teams` - registered teams (name + member names)
-- `players` - registered players (independent entity; not yet linked to teams)
+- `teams` - registered teams (`name`, `member_ids: list[str]` referencing `Player.id`)
+- `players` - registered players (`name`, `team_id: str | None` back-reference to the team)
 - `state` - runtime tournament state (current heat, stored matchups, timer, tables count)
+
+The Team/Player relationship is dual-written: every DAL mutation that changes a team's roster updates both `Team.member_ids` AND `Player.team_id` in one logical operation. A player belongs to at most one team; a team may have 0-3 members. 0-member teams are legal but hidden from all public views (admin-only).
 
 ## Features
 
 - **Next Heat** - shows the current heat number, countdown timer, and the generated matchups for this round (with live scores as they come in)
 - **Scoreboard** - live leaderboard sorted by wins desc, then total score desc. Team-highlight on the row you just scored for. Ties count as neither a win nor a loss.
 - **Register Score** - form to submit match results. Heat is server-locked to the current heat (the client's heat field is ignored on the backend).
-- **Teams** - public list of registered teams and their members
-- **Players** - public list of registered players (independent entity - CRUD lives in the Admin tab)
+- **Teams** - public list of registered teams with their members, plus a "Registered Players" sub-section showing every player alphabetically (by `localeCompare`, Danish-accent friendly). Each row has a local highlight checkbox: clicking a team highlights the team name only; clicking a player highlights both the player AND their team at equal intensity. Mutual-exclusion across team + player checkboxes. Highlight survives page reload via `localStorage` with self-healing (cleared if the cached name is no longer in the roster).
 - **Matches** - full match history
 - **Rules** - placeholder beer-pong rules (setup, gameplay, re-racks, island, winning, fouls, tournament format)
 - **Admin** - PIN-gated panel for:
-  - Heat management: set/advance heat, start heat timer
+  - **Team Roster Upload** - upload a CSV on tournament day to replace the roster. Two-step dry-run preview -> Confirm flow. On confirm, wipes teams + players + matches + heat state, then recreates from the CSV. 256 KiB cap. All-or-nothing validation (malformed file -> 400 with per-row errors, upload aborted).
+  - Heat management: set/advance heat, start heat timer, "Last heat" prioritisation checkbox
   - Game Settings: configurable match duration (integer minutes) and tables count (integer)
-  - Teams: add, remove
-  - Players: add, remove
+  - Create Team: empty team (name only) — useful for late-arriving teams
+  - Add Player: single player (name only) — useful for late walk-ins
+  - Manage Teams: list + delete (detaches players, players survive as Unassigned)
+  - Manage Players: list with team column, "Assign Team" modal to move a player (including to/from Unassigned), delete
   - Reset: wipe all matches
 
 Automatic team-name normalisation (trim + title-case) prevents duplicates. Same for player names.
@@ -67,7 +71,7 @@ The `state` Cosmos container persists the current heat, stored matchups, timer s
 cd backend
 just install        # uv sync
 just run            # uvicorn on :8000 (auto-reload)
-just test           # pytest (50+ tests)
+just test           # pytest (64 tests)
 just typecheck      # basedpyright (standard mode, not strict)
 just lint           # ruff
 just check          # lint + typecheck + test
@@ -146,18 +150,25 @@ All admin-protected endpoints require an `X-Admin-Token` header matching the `AD
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/teams` | List all registered teams |
+| GET | `/teams` | List all registered teams (includes 0-member teams; frontend filters for public views) |
 | GET | `/teams/names` | Sorted list of team names (for dropdowns) |
-| POST | `/teams` | Create a team (admin) |
-| DELETE | `/teams/{team_id}` | Delete a team (admin) |
+| POST | `/teams` | Create a team (admin). Body: `{name, member_ids: list[str]}` — `member_ids` may be empty |
+| DELETE | `/teams/{team_id}` | Delete a team (admin). Detaches attached players (sets their `team_id` to null); players survive |
 
 ### Players
 
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/players` | List all registered players |
-| POST | `/players` | Create a player (admin) |
-| DELETE | `/players/{player_id}` | Delete a player (admin) |
+| POST | `/players` | Create a player (admin). New players are Unassigned (`team_id = null`) |
+| DELETE | `/players/{player_id}` | Delete a player (admin). Detaches from their team first (removes the id from the team's `member_ids`) |
+| POST | `/players/{player_id}/team` | Move a player to a team (admin). Body: `{team_id: str \| null}`. `null` unassigns |
+
+### Admin roster upload
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/admin/teams/upload-csv` | Upload a CSV roster (admin). `multipart/form-data` with `file` field; optional `?dry_run=true` returns the preview without mutating. 256 KiB cap (413 on exceed). Strict all-or-nothing validation (400 with per-row errors on any malformed content). On live run, wipes teams + players + matches + heat/tournament state before creating the new roster |
 
 ### Heat
 
@@ -176,6 +187,14 @@ All admin-protected endpoints require an `X-Admin-Token` header matching the `AD
 |---|---|---|
 | POST | `/admin/verify` | Verify the admin token without doing anything |
 | POST | `/admin/reset` | Delete all matches (admin) |
+
+## Tournament-day flow
+
+1. Admin logs into the Admin tab with the PIN (`ADMIN_TOKEN` value).
+2. Admin uploads the roster CSV (`team_name,member1,member2[,member3]` per row) via **Team Roster Upload**. Click "Upload and preview" for a dry-run; review the preview; click "Confirm replacement" to wipe the DB and materialise the new roster.
+3. Late walk-ins: create a new empty team via **Create Team**, add the player(s) via **Add Player**, then use the **Assign Team** modal on Manage Players to link them.
+4. Matches get registered via the Register Score tab. Heat is server-locked to the current heat.
+5. Heat advances manually via **Setup Next Heat** (optionally with the "Last heat" checkbox to prioritise under-played teams).
 
 Full OpenAPI docs available at `{backend_url}/docs` after deployment.
 

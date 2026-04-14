@@ -55,6 +55,7 @@ class HeatState(BaseModel):
     id: str = "heat_state"
     current_heat: int = 1
     stored_matchups: list[HeatMatchup] = []
+    sitting_out: list[str] = []
     heat_timer_started_at: str | None = None
     timer_duration: int = 600
     tables: int = 8
@@ -83,6 +84,7 @@ class HeatInfo(BaseModel):
     matchups: list[HeatMatchup] = []
     teams_recorded: list[str] = []
     teams_not_recorded: list[str] = []
+    teams_sitting_out: list[str] = []
     timer_duration: int = 600
     timer_started_at: str | None = None
     tables: int = 8

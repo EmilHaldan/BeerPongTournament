@@ -287,3 +287,214 @@ def test_heat_shows_recorded_status() -> None:
     assert t1 in data["teams_recorded"]
     assert t2 in data["teams_recorded"]
     assert len(data["teams_not_recorded"]) == 2
+
+
+# ── Phase 2: tables-aware matchmaking ────────────────────────────────
+
+
+def test_scheduler_tables_constrained_sits_lowest_score() -> None:
+    """With 11 teams and tables=4, 3 teams with most matches+score should sit.
+
+    The priority rule is "lowest (total_matches, total_score) plays first";
+    the top of that ascending sort plays and the tail sits out. To get a
+    deterministic sit-out list with recorded matches we first give ALL
+    teams a match each so total_matches is constant, then layer extra
+    matches onto three specific teams so they have the highest total_score
+    and get pushed to the sit-out tail.
+    """
+    # Arrange – 11 teams registered; we sidestep the route-level validator
+    # that refuses tables=4 for 11 teams by calling the DAL directly.
+    from beerpong_api.dal.heat import set_tables as dal_set_tables
+
+    team_names = [f"Team{i:02d}" for i in range(1, 12)]
+    for name in team_names:
+        _register_team(name, [f"{name}A", f"{name}B"])
+
+    # Give every team exactly one match so total_matches is equal (1) and
+    # the tiebreaker is purely total_score.
+    base_pairs = [
+        ("Team01", "Team02"),
+        ("Team03", "Team04"),
+        ("Team05", "Team06"),
+        ("Team07", "Team08"),
+        ("Team09", "Team10"),
+    ]
+    for t1, t2 in base_pairs:
+        client.post(
+            "/matches",
+            json={"team1_name": t1, "team2_name": t2, "team1_score": 3, "team2_score": 3},
+        )
+    # Team11 has no match yet → total_matches = 0 → highest priority to play.
+    # We need Team11 IN the playing set too, but then the sitting-out tail
+    # has teams with (1, score). So the three teams with the HIGHEST score
+    # should end up sitting. We load Team08, Team09, Team10 up with more
+    # matches so they rise to the top of the sort (highest matches/score)
+    # and fall off the playing list.
+    #
+    # After base_pairs: every Team01..10 has total_matches=1, score depends
+    # on tie = no bonus so score equals cups = 3. Team11 has 0 matches 0 score.
+    #
+    # Now bump Team09 and Team10 with another tied match vs each other, and
+    # Team08 vs Team09 (still ties so no win bonuses). That makes:
+    #   Team08: matches=2, score=6
+    #   Team09: matches=3, score=9
+    #   Team10: matches=2, score=6
+    # Others: matches=1, score=3
+    # Team11: matches=0, score=0
+    client.post(
+        "/matches",
+        json={"team1_name": "Team09", "team2_name": "Team10", "team1_score": 3, "team2_score": 3},
+    )
+    client.post(
+        "/matches",
+        json={"team1_name": "Team08", "team2_name": "Team09", "team1_score": 3, "team2_score": 3},
+    )
+
+    # Force tables=4 past the validator, then advance so the scheduler
+    # recomputes using the constrained tables count.
+    dal_set_tables(4)
+    client.post("/heat/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
+
+    # Act
+    resp = client.get("/heat")
+
+    # Assert
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["matchups"]) == 4  # 4 tables → 4 games
+    playing_teams: set[str] = set()
+    for m in data["matchups"]:
+        playing_teams.add(m["team1_name"])
+        playing_teams.add(m["team2_name"])
+    assert len(playing_teams) == 8
+    sitting = data["teams_sitting_out"]
+    assert len(sitting) == 3
+    # Team08 (2,6), Team09 (3,9), Team10 (2,6) have the highest
+    # (total_matches, total_score) and therefore sit out. Team11 has
+    # zero matches so it definitely plays.
+    assert set(sitting) == {"Team08", "Team09", "Team10"}
+    assert "Team11" in playing_teams
+
+
+def test_scheduler_last_heat_forces_balance() -> None:
+    """With last_heat=true, the low-matches team must be in the next heat's games."""
+    # Arrange – 4 teams, plenty of tables (unconstrained).
+    _register_team("Alpha", ["Alice", "Bob"])
+    _register_team("Beta", ["Carol", "Dave"])
+    _register_team("Gamma", ["Eve", "Frank"])
+    _register_team("Delta", ["Grace", "Heidi"])
+
+    # Record several matches for everyone EXCEPT Delta so Delta has the
+    # fewest total_matches.
+    client.post(
+        "/matches",
+        json={"team1_name": "Alpha", "team2_name": "Beta", "team1_score": 4, "team2_score": 2},
+    )
+    client.post(
+        "/matches",
+        json={"team1_name": "Alpha", "team2_name": "Gamma", "team1_score": 3, "team2_score": 3},
+    )
+    client.post(
+        "/matches",
+        json={"team1_name": "Beta", "team2_name": "Gamma", "team1_score": 5, "team2_score": 1},
+    )
+
+    # Act – advance to next heat with last_heat flag on
+    resp = client.post(
+        "/heat/start-next",
+        json={"last_heat": True},
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+
+    # Assert – Delta (the low-matches team) must appear in a matchup
+    assert resp.status_code == 200
+    data = resp.json()
+    playing: set[str] = set()
+    for m in data["matchups"]:
+        playing.add(m["team1_name"])
+        playing.add(m["team2_name"])
+    assert "Delta" in playing
+
+
+def test_scheduler_unconstrained_without_last_heat_keeps_round_robin() -> None:
+    """Default unconstrained call should still return a round-robin slate."""
+    # Arrange
+    _register_team("Alpha", ["Alice", "Bob"])
+    _register_team("Beta", ["Carol", "Dave"])
+    _register_team("Gamma", ["Eve", "Frank"])
+    _register_team("Delta", ["Grace", "Heidi"])
+
+    # Act
+    resp = client.get("/heat")
+
+    # Assert
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["matchups"]) == 2
+    assert data["teams_sitting_out"] == []
+
+
+def test_post_tables_rejects_less_than_half_teams() -> None:
+    """POST /heat/tables must reject counts that can't fit half the teams."""
+    # Arrange – register 11 teams
+    for i in range(1, 12):
+        _register_team(f"Team{i:02d}", [f"P{i}A", f"P{i}B"])
+
+    # Act / Assert – 4 tables cannot cover 11 teams (need at least 6)
+    resp_four = client.post(
+        "/heat/tables",
+        json={"count": 4},
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+    assert resp_four.status_code == 400
+
+    # 5 tables is still too few (10 < 11)
+    resp_five = client.post(
+        "/heat/tables",
+        json={"count": 5},
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+    assert resp_five.status_code == 400
+
+    # 6 tables is enough (12 >= 11)
+    resp_six = client.post(
+        "/heat/tables",
+        json={"count": 6},
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+    assert resp_six.status_code == 200
+    assert resp_six.json()["tables"] == 6
+
+
+def test_start_next_heat_accepts_last_heat_flag() -> None:
+    """POST /heat/start-next with {"last_heat": true} must return 200."""
+    # Arrange
+    _register_team("Alpha", ["Alice", "Bob"])
+    _register_team("Beta", ["Carol", "Dave"])
+    _register_team("Gamma", ["Eve", "Frank"])
+    _register_team("Delta", ["Grace", "Heidi"])
+
+    # Act
+    resp = client.post(
+        "/heat/start-next",
+        json={"last_heat": True},
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+
+    # Assert
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["current_heat"] == 2
+    assert "teams_sitting_out" in data
+
+
+def test_heat_info_exposes_teams_sitting_out() -> None:
+    """GET /heat always exposes teams_sitting_out, empty by default."""
+    # Arrange / Act
+    resp = client.get("/heat")
+
+    # Assert
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "teams_sitting_out" in data
+    assert data["teams_sitting_out"] == []

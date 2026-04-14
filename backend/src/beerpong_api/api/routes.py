@@ -17,12 +17,15 @@ from beerpong_api.dal.heat import (
 )
 from beerpong_api.dal.leaderboard import compute_leaderboard
 from beerpong_api.dal.matches import delete_match, insert_match, list_matches, reset_matches
+from beerpong_api.dal.players import create_player, delete_player, list_players
 from beerpong_api.dal.teams import create_team, delete_team, get_team_names, list_teams
 from beerpong_api.db.models import (
     HeatInfo,
     LeaderboardEntry,
     MatchCreate,
     MatchResult,
+    Player,
+    PlayerCreate,
     Team,
     TeamCreate,
 )
@@ -139,6 +142,41 @@ def remove_team(
 def get_names() -> list[str]:
     """Return a sorted list of registered team names (for dropdowns)."""
     return get_team_names()
+
+
+# ── Players ───────────────────────────────────────────────────────────
+
+
+@router.get("/players", response_model=list[Player])
+def get_players() -> list[Player]:
+    """Return all registered players."""
+    return list_players()
+
+
+@router.post("/players", response_model=Player, status_code=201)
+def add_player(
+    payload: PlayerCreate,
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> Player:
+    """Create a new player (admin only)."""
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    return create_player(payload)
+
+
+@router.delete("/players/{player_id}", status_code=200)
+def remove_player(
+    player_id: str,
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> dict[str, str]:
+    """Delete a player by ID (admin only)."""
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    if not delete_player(player_id):
+        raise HTTPException(status_code=404, detail="Player not found")
+    return {"status": "deleted", "id": player_id}
 
 
 # ── Admin ─────────────────────────────────────────────────────────────

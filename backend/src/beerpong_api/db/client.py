@@ -39,6 +39,9 @@ _teams_container: ContainerLike | None = None
 # ── State container (heat tracking, etc.) ─────────────────────────────
 _state_container: ContainerLike | None = None
 
+# ── Players container ─────────────────────────────────────────────────
+_players_container: ContainerLike | None = None
+
 
 def get_container() -> ContainerLike:
     """Return the matches Cosmos container proxy (singleton)."""
@@ -79,9 +82,22 @@ def set_state_container(container: ContainerLike) -> None:
     _state_container = container
 
 
+def get_players_container() -> ContainerLike:
+    """Return the players Cosmos container proxy (singleton)."""
+    if _players_container is None:
+        raise RuntimeError("Database not initialised – call init_db() first")
+    return _players_container
+
+
+def set_players_container(container: ContainerLike) -> None:
+    """Override the players container (used in tests)."""
+    global _players_container  # noqa: PLW0603
+    _players_container = container
+
+
 def init_db(settings: Settings) -> None:
     """Initialise the Cosmos DB client from application settings."""
-    global _container, _teams_container, _state_container  # noqa: PLW0603
+    global _container, _teams_container, _state_container, _players_container  # noqa: PLW0603
 
     client = CosmosClient(settings.COSMOS_ENDPOINT, credential=settings.COSMOS_KEY)
     database = client.create_database_if_not_exists(id=settings.COSMOS_DATABASE)
@@ -97,16 +113,21 @@ def init_db(settings: Settings) -> None:
         id="state",
         partition_key=PartitionKey(path="/tournamentId"),
     )
+    _players_container = database.create_container_if_not_exists(  # pyright: ignore[reportAssignmentType]
+        id="players",
+        partition_key=PartitionKey(path="/tournamentId"),
+    )
 
 
 def init_local_db(db_path: str = "beerpong_local.db") -> None:
     """Initialise a local SQLite database for development."""
-    global _container, _teams_container, _state_container  # noqa: PLW0603
+    global _container, _teams_container, _state_container, _players_container  # noqa: PLW0603
     from pathlib import Path
 
     from beerpong_api.db.sqlite_container import create_sqlite_containers
 
-    matches_c, teams_c, state_c = create_sqlite_containers(db_path=Path(db_path))
+    matches_c, teams_c, state_c, players_c = create_sqlite_containers(db_path=Path(db_path))
     _container = matches_c  # pyright: ignore[reportAssignmentType]
     _teams_container = teams_c  # pyright: ignore[reportAssignmentType]
     _state_container = state_c  # pyright: ignore[reportAssignmentType]
+    _players_container = players_c  # pyright: ignore[reportAssignmentType]

@@ -114,3 +114,27 @@ class Team(BaseModel):
     tournament_id: str = Field(default="default", alias="tournamentId")
 
     model_config = {"populate_by_name": True}
+
+
+# ---------------------------------------------------------------------------
+# Player models
+# ---------------------------------------------------------------------------
+
+
+class PlayerCreate(BaseModel):
+    """Payload for creating a new player."""
+
+    name: str = Field(..., min_length=1, max_length=100, description="Player name")
+
+
+class Player(BaseModel):
+    """A persisted player."""
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    name: str
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(UTC).isoformat(),
+    )
+    tournament_id: str = Field(default="default", alias="tournamentId")
+
+    model_config = {"populate_by_name": True}

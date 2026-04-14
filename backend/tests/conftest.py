@@ -6,7 +6,12 @@ from typing import Any
 
 import pytest
 
-from beerpong_api.db.client import set_container, set_state_container, set_teams_container
+from beerpong_api.db.client import (
+    set_container,
+    set_players_container,
+    set_state_container,
+    set_teams_container,
+)
 
 
 class FakeContainer:
@@ -37,16 +42,20 @@ class FakeContainer:
         self, item: str | dict[str, object], partition_key: str | object, **kwargs: object
     ) -> None:
         item_id = item if isinstance(item, str) else str(item.get("id", ""))
-        self._items.pop(item_id, None)
+        if item_id not in self._items:
+            raise KeyError(item_id)
+        self._items.pop(item_id)
 
 
 @pytest.fixture(autouse=True)
 def _fake_db() -> FakeContainer:
-    """Inject FakeContainers for matches, teams, and state before every test."""
+    """Inject FakeContainers for matches, teams, state, and players before every test."""
     matches = FakeContainer()
     teams = FakeContainer()
     state = FakeContainer()
+    players = FakeContainer()
     set_container(matches)  # pyright: ignore[reportArgumentType]
     set_teams_container(teams)  # pyright: ignore[reportArgumentType]
     set_state_container(state)  # pyright: ignore[reportArgumentType]
+    set_players_container(players)  # pyright: ignore[reportArgumentType]
     return matches

@@ -245,21 +245,18 @@
           </table>
         </div>
 
-        <!-- Timer Settings -->
+        <!-- Game Settings -->
         <div class="admin-section">
-          <h3>Timer Settings</h3>
+          <h3>Game Settings</h3>
           <div class="form-group">
             <label for="timer-duration">Match Duration (minutes)</label>
-            <select id="timer-duration">
-              <option value="300">5</option>
-              <option value="420">7</option>
-              <option value="480">8</option>
-              <option value="600" selected>10</option>
-              <option value="720">12</option>
-              <option value="900">15</option>
-            </select>
+            <input type="number" id="timer-duration" min="1" value="10" />
           </div>
-          <button id="save-timer-btn" class="btn primary">Save Timer Duration</button>
+          <div class="form-group">
+            <label for="tables-count">Tables</label>
+            <input type="number" id="tables-count" min="1" value="8" />
+          </div>
+          <button id="save-game-settings-btn" class="btn primary">Save Game Settings</button>
         </div>
       </div>
     </section>

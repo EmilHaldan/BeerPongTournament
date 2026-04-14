@@ -339,6 +339,7 @@ def get_heat_info() -> HeatInfo:
         teams_not_recorded=sorted(teams_not_recorded),
         timer_duration=state.timer_duration,
         timer_started_at=state.heat_timer_started_at,
+        tables=state.tables,
     )
 
 
@@ -374,5 +375,13 @@ def set_timer_duration(seconds: int) -> HeatInfo:
     """Update the heat timer duration and return heat info."""
     state = _get_heat_state()
     state.timer_duration = seconds
+    _save_heat_state(state)
+    return get_heat_info()
+
+
+def set_tables(count: int) -> HeatInfo:
+    """Update the tables count (number of physical tables) and return heat info."""
+    state = _get_heat_state()
+    state.tables = count
     _save_heat_state(state)
     return get_heat_info()

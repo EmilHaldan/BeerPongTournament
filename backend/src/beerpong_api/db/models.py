@@ -50,13 +50,14 @@ class LeaderboardEntry(BaseModel):
 
 
 class HeatState(BaseModel):
-    """Persisted state tracking the current heat number."""
+    """Persisted state tracking the current heat number and game settings."""
 
     id: str = "heat_state"
     current_heat: int = 1
     stored_matchups: list[HeatMatchup] = []
     heat_timer_started_at: str | None = None
     timer_duration: int = 600
+    tables: int = 8
     tournament_id: str = Field(default="default", alias="tournamentId")
 
     model_config = {"populate_by_name": True}
@@ -84,6 +85,7 @@ class HeatInfo(BaseModel):
     teams_not_recorded: list[str] = []
     timer_duration: int = 600
     timer_started_at: str | None = None
+    tables: int = 8
 
 
 # ---------------------------------------------------------------------------

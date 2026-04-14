@@ -813,9 +813,14 @@ async function loadAdminHeatInfo() {
     if (!resp.ok) return;
     const data = await resp.json();
     updateAdminHeat(data.current_heat);
-    const durationSelect = document.getElementById("timer-duration");
-    if (durationSelect) {
-      durationSelect.value = String(data.timer_duration);
+    const durationInput = document.getElementById("timer-duration");
+    if (durationInput) {
+      const minutes = Math.max(1, Math.round((data.timer_duration || 600) / 60));
+      durationInput.value = String(minutes);
+    }
+    const tablesInput = document.getElementById("tables-count");
+    if (tablesInput) {
+      tablesInput.value = String(data.tables || 8);
     }
   } catch (err) {
     // ignore
@@ -942,25 +947,65 @@ async function deleteTeam(teamId) {
   }
 }
 
-// ── Admin: Timer Duration ──────────────────────────────────────────────
+// ── Admin: Game Settings (timer duration + tables) ─────────────────────
 
-document.getElementById("save-timer-btn").addEventListener("click", async () => {
-  const seconds = parseInt(document.getElementById("timer-duration").value, 10);
+function parsePositiveInt(raw) {
+  if (raw === null || raw === undefined) return null;
+  const trimmed = String(raw).trim();
+  if (trimmed === "") return null;
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  const n = parseInt(trimmed, 10);
+  if (!Number.isFinite(n) || n < 1) return null;
+  return n;
+}
+
+document.getElementById("save-game-settings-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("save-game-settings-btn");
+  const minutesRaw = document.getElementById("timer-duration").value;
+  const tablesRaw = document.getElementById("tables-count").value;
+
+  const minutes = parsePositiveInt(minutesRaw);
+  const tables = parsePositiveInt(tablesRaw);
+
+  if (minutes === null) {
+    showError("Match duration must be a whole number of minutes (1 or more)");
+    return;
+  }
+  if (tables === null) {
+    showError("Tables must be a whole number (1 or more)");
+    return;
+  }
+
+  const seconds = minutes * 60;
+
   try {
-    const resp = await fetch(API_BASE_URL + "/heat/timer-duration", {
+    const timerResp = await fetch(API_BASE_URL + "/heat/timer-duration", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
       body: JSON.stringify({ seconds }),
     });
-    if (!resp.ok) {
-      const detail = await resp.json().catch(() => ({}));
-      throw new Error(detail.detail || "Server error " + resp.status);
+    if (!timerResp.ok) {
+      const detail = await timerResp.json().catch(() => ({}));
+      throw new Error(detail.detail || "Server error " + timerResp.status);
     }
-    const btn = document.getElementById("save-timer-btn");
+
+    const tablesResp = await fetch(API_BASE_URL + "/heat/tables", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+      body: JSON.stringify({ count: tables }),
+    });
+    if (!tablesResp.ok) {
+      const detail = await tablesResp.json().catch(() => ({}));
+      throw new Error(
+        "Timer saved, but tables update failed: " +
+          (detail.detail || "Server error " + tablesResp.status)
+      );
+    }
+
     btn.textContent = "Saved!";
-    setTimeout(() => { btn.textContent = "Save Timer Duration"; }, 2000);
+    setTimeout(() => { btn.textContent = "Save Game Settings"; }, 2000);
   } catch (err) {
-    showError("Failed to save timer duration: " + err.message);
+    showError("Failed to save game settings: " + err.message);
   }
 });
 

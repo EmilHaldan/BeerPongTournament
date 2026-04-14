@@ -185,6 +185,62 @@ def test_leaderboard_includes_total_matches() -> None:
         assert entry["total_matches"] == 2  # Both teams played 2 matches
 
 
+def test_set_tables() -> None:
+    """POST /heat/tables with a valid count should update tables and return HeatInfo."""
+    # Arrange / Act
+    resp = client.post(
+        "/heat/tables",
+        json={"count": 12},
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+
+    # Assert
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["tables"] == 12
+
+    # And persisted on GET /heat
+    get_resp = client.get("/heat")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["tables"] == 12
+
+
+def test_set_tables_rejects_bad_token() -> None:
+    """POST /heat/tables with a non-admin token should return 403."""
+    resp = client.post(
+        "/heat/tables",
+        json={"count": 4},
+        headers={"X-Admin-Token": "wrong"},
+    )
+    assert resp.status_code == 403
+
+
+def test_set_tables_rejects_zero_or_negative() -> None:
+    """POST /heat/tables with count=0 or negative should return 400."""
+    zero_resp = client.post(
+        "/heat/tables",
+        json={"count": 0},
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+    assert zero_resp.status_code == 400
+
+    neg_resp = client.post(
+        "/heat/tables",
+        json={"count": -1},
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+    assert neg_resp.status_code == 400
+
+
+def test_get_heat_exposes_tables() -> None:
+    """GET /heat should expose the tables field with default 8."""
+    resp = client.get("/heat")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "tables" in data
+    assert data["tables"] == 8
+
+
 def test_heat_shows_recorded_status() -> None:
     """Heat info should indicate which matchups have recorded scores."""
     _register_team("Alpha", ["Alice", "Bob"])

@@ -35,7 +35,7 @@ def list_matches() -> list[MatchResult]:
     container = get_container()
     query = "SELECT * FROM c WHERE c.tournamentId = 'default' ORDER BY c.created_at DESC"
     items = container.query_items(query=query, enable_cross_partition_query=False)
-    return [MatchResult(**item) for item in items]  # pyright: ignore[reportUnknownArgumentType]
+    return [MatchResult(**item) for item in items]  # pyright: ignore[reportUnknownArgumentType, reportGeneralTypeIssues]
 
 
 def delete_match(match_id: str) -> bool:
@@ -62,7 +62,7 @@ def reset_matches() -> int:
     """
     container = get_container()
     query = "SELECT c.id FROM c WHERE c.tournamentId = 'default'"
-    items = list(container.query_items(query=query, enable_cross_partition_query=False))  # pyright: ignore[reportUnknownArgumentType]
+    items = list(container.query_items(query=query, enable_cross_partition_query=False))  # pyright: ignore[reportUnknownArgumentType, reportArgumentType]
     for item in items:
         container.delete_item(item=item["id"], partition_key="default")  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
     return len(items)

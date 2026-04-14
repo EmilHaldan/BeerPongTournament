@@ -42,7 +42,6 @@ _state_container: ContainerLike | None = None
 
 def get_container() -> ContainerLike:
     """Return the matches Cosmos container proxy (singleton)."""
-    global _container  # noqa: PLW0603
     if _container is None:
         raise RuntimeError("Database not initialised – call init_db() first")
     return _container
@@ -50,7 +49,6 @@ def get_container() -> ContainerLike:
 
 def get_teams_container() -> ContainerLike:
     """Return the teams Cosmos container proxy (singleton)."""
-    global _teams_container  # noqa: PLW0603
     if _teams_container is None:
         raise RuntimeError("Database not initialised – call init_db() first")
     return _teams_container
@@ -70,7 +68,6 @@ def set_teams_container(container: ContainerLike) -> None:
 
 def get_state_container() -> ContainerLike:
     """Return the state Cosmos container proxy (singleton)."""
-    global _state_container  # noqa: PLW0603
     if _state_container is None:
         raise RuntimeError("Database not initialised – call init_db() first")
     return _state_container
@@ -88,15 +85,15 @@ def init_db(settings: Settings) -> None:
 
     client = CosmosClient(settings.COSMOS_ENDPOINT, credential=settings.COSMOS_KEY)
     database = client.create_database_if_not_exists(id=settings.COSMOS_DATABASE)
-    _container = database.create_container_if_not_exists(
+    _container = database.create_container_if_not_exists(  # pyright: ignore[reportAssignmentType]
         id=settings.COSMOS_CONTAINER,
         partition_key=PartitionKey(path="/tournamentId"),
     )
-    _teams_container = database.create_container_if_not_exists(
+    _teams_container = database.create_container_if_not_exists(  # pyright: ignore[reportAssignmentType]
         id="teams",
         partition_key=PartitionKey(path="/tournamentId"),
     )
-    _state_container = database.create_container_if_not_exists(
+    _state_container = database.create_container_if_not_exists(  # pyright: ignore[reportAssignmentType]
         id="state",
         partition_key=PartitionKey(path="/tournamentId"),
     )

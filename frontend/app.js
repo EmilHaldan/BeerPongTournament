@@ -765,7 +765,7 @@ function renderHeatInfo(heatInfo) {
         return `
     <div class="matchup-card ${recordedClass} ${winnerClass}">
       <div class="matchup-team red-side">
-        <div class="matchup-name-row"><span class="matchup-color red">\u{1F534}</span><span class="matchup-name">${escapeHtml(redName)}</span></div>
+        <div class="matchup-name-row"><span class="matchup-name">${escapeHtml(redName)}</span></div>
         <span class="matchup-pts">${redPts} pts</span>
       </div>
       <div class="matchup-center">
@@ -774,7 +774,7 @@ function renderHeatInfo(heatInfo) {
         ${scoreText}
       </div>
       <div class="matchup-team blue-side">
-        <div class="matchup-name-row"><span class="matchup-name">${escapeHtml(blueName)}</span><span class="matchup-color blue">\u{1F535}</span></div>
+        <div class="matchup-name-row"><span class="matchup-name">${escapeHtml(blueName)}</span></div>
         <span class="matchup-pts">${bluePts} pts</span>
       </div>
     </div>`;

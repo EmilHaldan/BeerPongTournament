@@ -14,6 +14,7 @@ from beerpong_api.dal.heat import (
     reset_tournament,
     set_frozen,
     set_heat,
+    set_max_cups,
     set_tables,
     set_timer_duration,
     start_heat_timer,
@@ -512,6 +513,21 @@ def set_tables_route(
             ),
         )
     return set_tables(count)
+
+
+@router.post("/heat/max-cups", response_model=HeatInfo, status_code=200)
+def set_max_cups_route(
+    payload: dict[str, int],
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> HeatInfo:
+    """Set the per-team max cups (upper bound on a single match score)."""
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    count = payload.get("count")
+    if count is None or count < 1:
+        raise HTTPException(status_code=400, detail="Max cups must be at least 1")
+    return set_max_cups(count)
 
 
 @router.post("/heat/frozen", response_model=HeatInfo, status_code=200)

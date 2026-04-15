@@ -72,6 +72,27 @@ def insert_match(payload: MatchCreate) -> MatchResult:
     state = _get_heat_state()
     phase = state.phase
 
+    max_cups = state.max_cups
+    if payload.team1_score > max_cups or payload.team2_score > max_cups:
+        raise ValueError(f"Scores must be between 0 and {max_cups}")
+
+    # Reject pairs that aren't on the current heat's schedule. Without this,
+    # a user whose Register Score tab is stale (heat was advanced server-side
+    # while their tab sat open) can submit a pair from the previous heat and
+    # the backend happily stores it. Empty stored_matchups means the heat
+    # hasn't been seeded yet (e.g. freshly imported roster) — skip the check.
+    if state.stored_matchups:
+        current_pair = frozenset({team1, team2})
+        valid_pairs = {
+            frozenset({mu.team1_name, mu.team2_name}) for mu in state.stored_matchups
+        }
+        if current_pair not in valid_pairs:
+            raise ValueError(
+                f"'{team1}' vs '{team2}' is not a scheduled matchup for heat "
+                f"{state.current_heat}. Reload the page and pick teams from the "
+                f"current heat's matchups."
+            )
+
     if phase in {"semifinals", "finals"} and payload.team1_score == payload.team2_score:
         raise ValueError(
             "Knockout matches cannot end in a tie — play sudden death until someone scores."

@@ -75,6 +75,9 @@ def test_create_match_rejects_negative_score() -> None:
 
 
 def test_create_match_rejects_score_above_six() -> None:
+    """Default ``max_cups`` is 6 (stored in HeatState). A score of 7 must be
+    rejected by the server-side bound check rather than Pydantic, since the
+    upper bound is now configurable via Game Settings."""
     resp = client.post(
         "/matches",
         json={
@@ -84,7 +87,8 @@ def test_create_match_rejects_score_above_six() -> None:
             "team2_score": 3,
         },
     )
-    assert resp.status_code == 422
+    assert resp.status_code == 400
+    assert "between 0 and 6" in resp.json()["detail"]
 
 
 def test_create_match_rejects_empty_name() -> None:

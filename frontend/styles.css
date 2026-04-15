@@ -484,6 +484,9 @@ tbody tr:hover {
   align-items: center;
   justify-content: center;
   isolation: isolate;
+  /* 3D perspective lets the logo flip like a coin on Y-axis rotation. */
+  perspective: 1200px;
+  cursor: pointer;
 }
 
 .heat-display::before {
@@ -495,7 +498,15 @@ tbody tr:hover {
   background-position: center;
   background-size: 100% 100%;
   opacity: 1;
-  transform: scaleX(-1);
+  /* ``--flip-rot`` is bumped +900deg per click by the JS handler — 2.5
+     rotations per click, so each click lands the logo mirrored from the
+     previous stable side. Cubic-bezier(0.45, 0.05, 0.55, 0.95) is an
+     ease-in-out approximating a sigmoid, which reads naturally as a coin
+     spinning and settling. */
+  transform: scaleX(-1) rotateY(var(--flip-rot, 0deg));
+  transition: transform 0.9s cubic-bezier(0.45, 0.05, 0.55, 0.95);
+  transform-style: preserve-3d;
+  backface-visibility: visible;
   pointer-events: none;
   z-index: 0;
 }
@@ -610,12 +621,38 @@ tbody tr:hover {
   padding: 0.8rem 1.2rem;
   position: relative;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .matchup-team {
   flex: 1;
   text-align: center;
   min-width: 0;
+}
+
+/* Expanding matchup card — click to reveal per-team cup stats.
+   Uses ``max-height`` for the growth animation (smooth on every browser;
+   the grid-template-rows trick was jittery at start). Sigmoid-ish timing
+   on the height change; plain opacity fade on the text so it doesn't
+   "fold out" line by line — the whole block fades as a unit. */
+.matchup-card .matchup-team-stats {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  margin-top: 0;
+  transition:
+    max-height 0.45s cubic-bezier(0.45, 0.05, 0.55, 0.95),
+    margin-top 0.45s cubic-bezier(0.45, 0.05, 0.55, 0.95),
+    opacity 1s ease;
+}
+
+.matchup-card[data-expanded="true"] .matchup-team-stats {
+  max-height: 8rem;
+  margin-top: 0.35rem;
+  opacity: 1;
 }
 
 .matchup-name-row {
@@ -634,11 +671,18 @@ tbody tr:hover {
   overflow-wrap: anywhere;
   word-break: break-word;
   line-height: 1.2;
+  /* Reserve vertical space for 2 lines so single-line team names sit
+     vertically centered alongside multi-line names in the same row. */
+  min-height: calc(1.2em * 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .matchup-pts {
   display: block;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--text-muted);
   margin-top: 0.1rem;
 }
@@ -697,10 +741,12 @@ tbody tr:hover {
 .matchup-card.winner-right::after {
   content: '';
   position: absolute;
-  top: 0;
+  /* Offset by the card's 2px border so the pennant sits flush with the
+     outer rounded edge and isn't visually clipped by the border stroke. */
+  top: -6px;
   width: 24px;
-  height: 100%;
-  background: #228B22;
+  height: calc(100% + 1px);
+  background: var(--success);
   clip-path: polygon(0 0, 100% 0, 100% 85%, 50% 100%, 0 85%);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23FFD700' d='M14 8h36v20c0 10-8 18-18 18S14 38 14 28V8z'/%3E%3Cpath fill='%23FFD700' d='M50 12h6c2 0 4 2 4 4v6c0 6-4 10-10 10V12zM14 12H8c-2 0-4 2-4 4v6c0 6 4 10 10 10V12z'/%3E%3Crect fill='%23DAA520' x='24' y='46' width='16' height='6' rx='2'/%3E%3Crect fill='%23DAA520' x='20' y='52' width='24' height='5' rx='2'/%3E%3Cpath fill='%23FFF8DC' d='M28 20h8v8h-8z' opacity='0.4'/%3E%3Cpath fill='%23FFF8DC' d='M24 28h16v4H24z' opacity='0.4'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -709,12 +755,12 @@ tbody tr:hover {
 }
 
 .matchup-card.winner-left::before {
-  left: 0;
+  left: 3px;
   border-radius: var(--radius) 0 0 0;
 }
 
 .matchup-card.winner-right::after {
-  right: 0;
+  right: 3px;
   border-radius: 0 var(--radius) 0 0;
 }
 
@@ -830,7 +876,7 @@ tbody tr:hover {
   }
 
   .matchup-pts {
-    font-size: 0.7rem;
+    font-size: 0.85rem;
   }
 
   .matchup-vs {
@@ -984,6 +1030,22 @@ tbody tr:hover {
   cursor: pointer;
 }
 
+.admin-checkbox input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.admin-checkbox.admin-checkbox-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#start-knockout-btn:disabled,
+#start-next-heat-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+
 @media (max-width: 500px) {
   .admin-section {
     padding: 1rem;
@@ -1011,6 +1073,14 @@ tbody tr:hover {
 .team-highlight-text {
   color: var(--success);
   text-shadow: 0 0 8px rgba(46, 204, 113, 0.7);
+}
+
+/* Register Score dropdowns: keep the green colour to signal the highlighted
+   team, but drop the glow — text-shadow on <select> is noisy and reads as a
+   render artefact more than a deliberate highlight. */
+#team1_name.team-highlight-text,
+#team2_name.team-highlight-text {
+  text-shadow: none;
 }
 
 #teams-body .team-name-cell,
@@ -1556,12 +1626,24 @@ tbody tr:hover {
   background: linear-gradient(135deg, #ffdf80 0%, #ffc21f 100%);
 }
 
+.heading-finals,
+.heading-semis {
+  font-size: 2rem;
+  letter-spacing: 0.05em;
+}
+
 .heading-finals {
   color: #ffd700 !important;
   text-shadow:
     0 0 18px rgba(255, 215, 0, 0.9),
     0 0 32px rgba(255, 215, 0, 0.6);
-  letter-spacing: 0.05em;
+}
+
+.heading-semis {
+  color: #dcdcdc !important;
+  text-shadow:
+    0 0 18px rgba(220, 220, 220, 0.9),
+    0 0 32px rgba(200, 200, 200, 0.6);
 }
 
 .winner-banner {

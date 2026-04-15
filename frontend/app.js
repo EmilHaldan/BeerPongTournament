@@ -3,6 +3,66 @@
 // Current matchups cache (populated from heat info)
 let currentMatchups = [];
 let currentSittingOut = [];
+let matchesCache = [];
+// Matchup cards are re-rendered on every /heat poll (1s), which wipes the DOM
+// expansion state. Track which matchup keys the user has expanded so we can
+// re-apply the state after each render.
+const expandedMatchups = new Set();
+
+function _matchupKey(a, b) {
+  return [a, b].sort().join("~~");
+}
+
+// Delegated toggle for expanding a matchup card on click. Registered once on
+// the Heat tab container; re-rendering the inner markup doesn't detach it.
+(() => {
+  const container = document.getElementById("heat-matchups");
+  if (!container) return;
+  container.addEventListener("click", (e) => {
+    const card = e.target.closest(".matchup-card");
+    if (!card || !container.contains(card)) return;
+    const key = card.getAttribute("data-matchup-key");
+    if (!key) return;
+    if (expandedMatchups.has(key)) {
+      expandedMatchups.delete(key);
+      card.setAttribute("data-expanded", "false");
+    } else {
+      expandedMatchups.add(key);
+      card.setAttribute("data-expanded", "true");
+    }
+  });
+})();
+
+// Coin-flip spin for the Heat tab's MLB-style logo. Click the heat-display
+// card → the background logo rotates 900° (2.5 turns) on the Y axis and
+// settles on the mirrored side. Each subsequent click repeats, so the logo
+// alternates between its two orientations.
+(() => {
+  const display = document.querySelector("#tab-nextheat .heat-display");
+  if (!display) return;
+  let rot = 0;
+  display.addEventListener("click", () => {
+    rot += 900;
+    display.style.setProperty("--flip-rot", rot + "deg");
+  });
+})();
+
+function _teamCupStats(teamName) {
+  const scores = [];
+  for (const m of matchesCache || []) {
+    if (m.team1_name === teamName) scores.push(m.team1_score);
+    else if (m.team2_name === teamName) scores.push(m.team2_score);
+  }
+  const n = scores.length;
+  if (n === 0) return { avg: 0, stdev: 0, min: 0, max: 0, n: 0 };
+  const sum = scores.reduce((a, b) => a + b, 0);
+  const avg = sum / n;
+  const min = Math.min(...scores);
+  const max = Math.max(...scores);
+  if (n === 1) return { avg, stdev: 0, min, max, n };
+  const variance = scores.reduce((s, x) => s + (x - avg) ** 2, 0) / n;
+  return { avg, stdev: Math.sqrt(variance), min, max, n };
+}
 
 // Knockout bracket roster — names still active in the bracket. Empty when the
 // tournament is in regular phase; populated by renderHeatInfo during SF/F.
@@ -15,6 +75,7 @@ let bellPlayed = false;
 let countdownSoundsPlayed = new Set(); // track which countdown numbers already played
 let lastTimerStartedAt = null; // Track timer state to detect new timer starts
 let heatPollInterval = null;
+let registerPollInterval = null;
 let boardPollInterval = null;
 
 // "My team" highlight — persisted to localStorage, self-heals post-roster-change.
@@ -207,8 +268,14 @@ document.querySelectorAll(".tab").forEach((btn) => {
       loadTeamsAndPlayers();
       setTeamsTabView(highlightedPlayer ? "teams" : "players");
     }
-    if (btn.dataset.tab === "nextheat") startHeatPolling();
-    else stopHeatPolling();
+    if (btn.dataset.tab === "nextheat" || btn.dataset.tab === "admin") {
+      startHeatPolling();
+      // Populate matches cache so matchup tile expansion can compute cup stats
+      // without waiting for a tab switch.
+      loadMatches();
+    } else {
+      stopHeatPolling();
+    }
     if (btn.dataset.tab === "admin") loadAdminHeatInfo();
     if (btn.dataset.tab === "register") {
       // Refresh the roster cache so dropdowns reflect any CSV uploads, new
@@ -218,9 +285,28 @@ document.querySelectorAll(".tab").forEach((btn) => {
       // Reset cups hit dropdowns to 0
       document.getElementById("team1_score").value = "0";
       document.getElementById("team2_score").value = "0";
+      startRegisterPolling();
+    } else {
+      stopRegisterPolling();
     }
   });
 });
+
+function startRegisterPolling() {
+  // Keep the Register Score tab's dropdowns + matchup cache in sync with the
+  // server. If another device advances the heat while this tab is open, we'd
+  // otherwise let the user submit a stale pair; the backend now also
+  // rejects that, but syncing the UI gives the clearer error.
+  stopRegisterPolling();
+  registerPollInterval = setInterval(loadCurrentHeat, 3000);
+}
+
+function stopRegisterPolling() {
+  if (registerPollInterval) {
+    clearInterval(registerPollInterval);
+    registerPollInterval = null;
+  }
+}
 
 // Error banner helper
 function showError(msg) {
@@ -459,9 +545,7 @@ document.getElementById("match-form").addEventListener("submit", async (e) => {
       throw new Error(detail.detail || "Server error " + resp.status);
     }
     form.reset();
-    // DEV ONLY — animation temporarily disabled while iterating on the UI.
-    // MUST be re-enabled before deploying. Uncomment the next line:
-    // showScoreAnimation(body.team1_name, body.team1_score, body.team2_name, body.team2_score);
+    showScoreAnimation(body.team1_name, body.team1_score, body.team2_name, body.team2_score);
   } catch (err) {
     showError("Failed to submit: " + err.message);
   }
@@ -475,6 +559,7 @@ async function loadMatches() {
     const resp = await fetch(API_BASE_URL + "/matches");
     if (!resp.ok) throw new Error("Failed to load matches");
     const data = await resp.json();
+    matchesCache = data;
     renderMatches(data);
   } catch (err) {
     showError("Could not load matches: " + err.message);
@@ -494,7 +579,7 @@ function renderMatches(matches) {
       <td>${escapeHtml(m.team1_name)}</td>
       <td class="score-cell">${m.team1_score} - ${m.team2_score}</td>
       <td>${escapeHtml(m.team2_name)}</td>
-      <td class="score-cell">${m.heat}</td>
+      <td class="score-cell">${m.phase === "semifinals" ? "SF" : m.phase === "finals" ? "F" : m.heat}</td>
       <td class="date-cell">${formatDate(m.created_at)}</td>
       <td><button class="btn-delete" onclick="deleteMatch('${m.id}')">✕</button></td>
     </tr>`
@@ -528,6 +613,10 @@ async function deleteMatch(matchId) {
     loadMatches();
     // Also refresh leaderboard since it depends on matches
     loadLeaderboard();
+    // And refresh heat info so Heat Management button states (Setup Next
+    // Heat, Start Knockout, Wrap-up) reflect the new teams_not_recorded /
+    // leaderboard totals.
+    loadHeatInfo();
   } catch (err) {
     showError("Failed to delete match: " + err.message);
   }
@@ -630,15 +719,24 @@ function renderRegisteredPlayers(players, teams) {
 }
 
 function populateTeamDropdowns() {
-  // Exclude 0-member teams AND teams that are sitting out this heat — they
-  // have no matchup, so they can't register a score. During knockout,
-  // restrict further to the teams still active in the bracket.
+  // Dropdowns must mirror the current heat's schedule so the user can't pick
+  // a sitting-out team. Source of truth: the teams referenced in
+  // ``currentMatchups``. Fall back to the legacy roster-minus-sitting rule
+  // only when the heat has no scheduled matchups yet (fresh roster upload).
   const sittingSet = new Set(currentSittingOut || []);
-  let names = (teamsCache || [])
-    .filter(t => (t.member_ids || []).length > 0)
-    .map(t => t.name)
-    .filter(name => !sittingSet.has(name))
-    .sort((a, b) => a.localeCompare(b));
+  const playingSet = new Set(
+    (currentMatchups || []).flatMap((m) => [m.team1_name, m.team2_name]),
+  );
+  let names;
+  if (playingSet.size > 0) {
+    names = [...playingSet].sort((a, b) => a.localeCompare(b));
+  } else {
+    names = (teamsCache || [])
+      .filter((t) => (t.member_ids || []).length > 0)
+      .map((t) => t.name)
+      .filter((name) => !sittingSet.has(name))
+      .sort((a, b) => a.localeCompare(b));
+  }
   if (knockoutActiveTeams && knockoutActiveTeams.length > 0) {
     const allowed = new Set(knockoutActiveTeams);
     names = names.filter((n) => allowed.has(n));
@@ -665,35 +763,30 @@ function populateTeamDropdowns() {
 }
 
 
-// Auto-select opponent when a team is selected in Register Score
+// Auto-select opponent when a team is selected in Register Score. Prefer
+// unrecorded matchups so picking a team from an unplayed pair doesn't get
+// shadowed by a sibling matchup that's already been scored (knockout SF).
+function _findOpponent(selected) {
+  const sorted = [...currentMatchups].sort((a, b) => (a.recorded ? 1 : 0) - (b.recorded ? 1 : 0));
+  for (const m of sorted) {
+    if (m.team1_name === selected) return m.team2_name;
+    if (m.team2_name === selected) return m.team1_name;
+  }
+  return null;
+}
+
 document.getElementById("team1_name").addEventListener("change", () => {
   const selected = document.getElementById("team1_name").value;
   if (!selected || currentMatchups.length === 0) return;
-  for (const m of currentMatchups) {
-    if (m.team1_name === selected) {
-      document.getElementById("team2_name").value = m.team2_name;
-      return;
-    }
-    if (m.team2_name === selected) {
-      document.getElementById("team2_name").value = m.team1_name;
-      return;
-    }
-  }
+  const opp = _findOpponent(selected);
+  if (opp) document.getElementById("team2_name").value = opp;
 });
 
 document.getElementById("team2_name").addEventListener("change", () => {
   const selected = document.getElementById("team2_name").value;
   if (!selected || currentMatchups.length === 0) return;
-  for (const m of currentMatchups) {
-    if (m.team1_name === selected) {
-      document.getElementById("team1_name").value = m.team2_name;
-      return;
-    }
-    if (m.team2_name === selected) {
-      document.getElementById("team1_name").value = m.team1_name;
-      return;
-    }
-  }
+  const opp = _findOpponent(selected);
+  if (opp) document.getElementById("team1_name").value = opp;
 });
 
 
@@ -716,8 +809,15 @@ async function loadHeatInfo() {
 
 function startHeatPolling() {
   loadHeatInfo();
+  loadMatches();
   stopHeatPolling();
-  heatPollInterval = setInterval(loadHeatInfo, 1000);
+  heatPollInterval = setInterval(() => {
+    loadHeatInfo();
+    // Refresh matches cache each tick so _teamCupStats has real numbers —
+    // otherwise the matchup-card expansion renders 0.0 until the user
+    // visits the Matches tab.
+    loadMatches();
+  }, 1000);
 }
 
 function stopHeatPolling() {
@@ -750,18 +850,19 @@ function renderHeatInfo(heatInfo) {
     heatNumEl.textContent = heatInfo.current_heat;
   }
 
-  // Matchups heading text + gold-glow class (Finals only).
+  // Matchups heading text + glow class — silver for Semi Finals, gold for
+  // Finals. Both get the same size bump via the shared CSS rule.
   const headingEl = document.getElementById("heat-matchups-heading");
   if (headingEl) {
+    headingEl.classList.remove("heading-finals", "heading-semis");
     if (phase === "semifinals") {
       headingEl.textContent = "Semi Finals";
-      headingEl.classList.remove("heading-finals");
+      headingEl.classList.add("heading-semis");
     } else if (phase === "finals" || phase === "complete") {
       headingEl.textContent = "Finals";
       headingEl.classList.add("heading-finals");
     } else {
       headingEl.textContent = "Matchups";
-      headingEl.classList.remove("heading-finals");
     }
   }
 
@@ -801,12 +902,32 @@ function renderHeatInfo(heatInfo) {
     populateTeamDropdowns();
   }
 
-  // Hide Last-heat / Start-Knockout controls outside the regular phase.
+  // Hide Wrap-up / Start-Knockout controls outside the regular phase.
   const lastHeatLabel = document.querySelector('label.admin-checkbox:has(#last-heat-checkbox)');
+  const lastHeatCheckbox = document.getElementById("last-heat-checkbox");
   const knockoutBtn = document.getElementById("start-knockout-btn");
   const knockoutWrap = knockoutBtn ? knockoutBtn.closest(".admin-knockout-wrap") : null;
   if (lastHeatLabel) lastHeatLabel.classList.toggle("hidden", phase !== "regular");
   if (knockoutWrap) knockoutWrap.classList.toggle("hidden", phase !== "regular");
+  // Feasibility gates (server-computed). Disable the checkbox + button when
+  // the action wouldn't leave all teams with equal match counts.
+  if (lastHeatCheckbox) {
+    const allowed = !!heatInfo.wrap_up_allowed;
+    if (!allowed) lastHeatCheckbox.checked = false;
+    lastHeatCheckbox.disabled = !allowed;
+    if (lastHeatLabel) lastHeatLabel.classList.toggle("admin-checkbox-disabled", !allowed);
+  }
+  if (knockoutBtn) {
+    knockoutBtn.disabled = !heatInfo.knockout_allowed;
+  }
+  // "Setup Next Heat" requires every playing team in the current heat to have
+  // registered its score. Disable when any team is still outstanding.
+  const setupNextBtn = document.getElementById("start-next-heat-btn");
+  if (setupNextBtn) {
+    const notRecorded = heatInfo.teams_not_recorded || [];
+    const outsideRegular = phase !== "regular" && phase !== "semifinals";
+    setupNextBtn.disabled = notRecorded.length > 0 || outsideRegular;
+  }
 
   // Update timer display
   updateTimerDisplay(heatInfo.timer_started_at, heatInfo.timer_duration || 480);
@@ -853,11 +974,22 @@ function renderHeatInfo(heatInfo) {
           : '<span class="matchup-score pending">Not recorded</span>';
         const tableNumber = idx + 1;
 
+        const redStats = _teamCupStats(redName);
+        const blueStats = _teamCupStats(blueName);
+        const fmt = (v) => v.toFixed(1);
+        const renderStats = (s) => `
+          <div>Avg Cups: ${fmt(s.avg)}</div>
+          <div>Stdev Cups: ${fmt(s.stdev)}</div>
+          <div>Min Cups: ${s.min}</div>
+          <div>Max Cups: ${s.max}</div>`;
+        const matchupKey = _matchupKey(redName, blueName);
+        const isExpanded = expandedMatchups.has(matchupKey) ? "true" : "false";
         return `
-    <div class="matchup-card ${recordedClass} ${winnerClass}">
+    <div class="matchup-card ${recordedClass} ${winnerClass}" data-expanded="${isExpanded}" data-matchup-key="${escapeHtml(matchupKey)}">
       <div class="matchup-team red-side">
         <div class="matchup-name-row"><span class="matchup-name">${escapeHtml(redName)}</span></div>
         <span class="matchup-pts">${redPts} pts</span>
+        <div class="matchup-team-stats">${renderStats(redStats)}</div>
       </div>
       <div class="matchup-center">
         <div class="matchup-table">Table ${tableNumber}</div>
@@ -867,6 +999,7 @@ function renderHeatInfo(heatInfo) {
       <div class="matchup-team blue-side">
         <div class="matchup-name-row"><span class="matchup-name">${escapeHtml(blueName)}</span></div>
         <span class="matchup-pts">${bluePts} pts</span>
+        <div class="matchup-team-stats">${renderStats(blueStats)}</div>
       </div>
     </div>`;
       }
@@ -900,16 +1033,61 @@ function renderHeatInfo(heatInfo) {
   applyTeamHighlight();
 }
 
+let _lastHeatSignature = "";
+let _lastMaxCups = 0;
+
+function _syncScoreDropdowns(maxCups) {
+  if (maxCups === _lastMaxCups) return;
+  _lastMaxCups = maxCups;
+  ["team1_score", "team2_score"].forEach((id) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = "";
+    for (let i = 0; i <= maxCups; i += 1) {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = String(i);
+      sel.appendChild(opt);
+    }
+    // Preserve prior selection if still valid, else default to 0.
+    sel.value = prev && Number(prev) <= maxCups ? prev : "0";
+  });
+}
+
 async function loadCurrentHeat() {
   try {
     const resp = await fetch(API_BASE_URL + "/heat");
     if (!resp.ok) throw new Error("Failed to load heat");
     const data = await resp.json();
     document.getElementById("heat").value = data.current_heat;
-    // Refresh sitting-out cache + rebuild dropdowns so teams that aren't
-    // playing this heat don't appear in Register Score.
     currentSittingOut = data.teams_sitting_out || [];
-    populateTeamDropdowns();
+    currentMatchups = data.matchups || [];
+    _syncScoreDropdowns(data.max_cups || 6);
+    const phase = data.phase || "regular";
+    if (phase === "semifinals") {
+      knockoutActiveTeams = Array.isArray(data.knockout_seeds)
+        ? [...data.knockout_seeds]
+        : [];
+    } else if (phase === "finals") {
+      const m = (data.matchups || [])[0];
+      knockoutActiveTeams = m ? [m.team1_name, m.team2_name] : [];
+    } else {
+      knockoutActiveTeams = [];
+    }
+    // Only rebuild dropdowns when the relevant state actually changes, so a
+    // 3-second poll doesn't clobber the user's in-progress selections.
+    const signature = [
+      data.current_heat,
+      phase,
+      currentSittingOut.join(","),
+      knockoutActiveTeams.join(","),
+      currentMatchups.map((m) => m.team1_name + "|" + m.team2_name).join("~"),
+    ].join("#");
+    if (signature !== _lastHeatSignature) {
+      _lastHeatSignature = signature;
+      populateTeamDropdowns();
+    }
   } catch (err) {
     // Silently fall back to 1
     document.getElementById("heat").value = 1;
@@ -920,7 +1098,7 @@ document.getElementById("start-next-heat-btn").addEventListener("click", async (
   const lastHeatCheckbox = document.getElementById("last-heat-checkbox");
   const lastHeat = !!(lastHeatCheckbox && lastHeatCheckbox.checked);
   const promptMsg = lastHeat
-    ? "Setup the next (LAST) heat – teams with the fewest games get priority. Continue?"
+    ? "Setup the next heat in Wrap-up mode — only teams with the fewest games play. Continue?"
     : "This will setup the next heat (advance heat number and generate new matchups). Continue?";
   if (!confirm(promptMsg)) return;
 
@@ -937,8 +1115,9 @@ document.getElementById("start-next-heat-btn").addEventListener("click", async (
     const data = await resp.json();
     renderHeatInfo(data);
     updateAdminHeat(data.current_heat);
-    // Reset the checkbox so it does not carry over to the next invocation.
-    if (lastHeatCheckbox) lastHeatCheckbox.checked = false;
+    // Wrap-up checkbox stays in its current state — user explicitly decides
+    // when to flip it off. renderHeatInfo will auto-uncheck it once the
+    // server reports wrap_up_allowed=false.
   } catch (err) {
     showError("Could not setup next heat: " + err.message);
   }
@@ -1064,6 +1243,10 @@ async function loadAdminHeatInfo() {
     const tablesInput = document.getElementById("tables-count");
     if (tablesInput) {
       tablesInput.value = String(data.tables || 8);
+    }
+    const maxCupsInput = document.getElementById("max-cups-count");
+    if (maxCupsInput) {
+      maxCupsInput.value = String(data.max_cups || 6);
     }
     const freezeCheckbox = document.getElementById("freeze-tournament-checkbox");
     if (freezeCheckbox) {
@@ -1417,9 +1600,11 @@ document.getElementById("save-game-settings-btn").addEventListener("click", asyn
   const btn = document.getElementById("save-game-settings-btn");
   const minutesRaw = document.getElementById("timer-duration").value;
   const tablesRaw = document.getElementById("tables-count").value;
+  const maxCupsRaw = document.getElementById("max-cups-count").value;
 
   const minutes = parsePositiveInt(minutesRaw);
   const tables = parsePositiveInt(tablesRaw);
+  const maxCups = parsePositiveInt(maxCupsRaw);
 
   clearGameSettingsFeedback();
 
@@ -1429,6 +1614,10 @@ document.getElementById("save-game-settings-btn").addEventListener("click", asyn
   }
   if (tables === null) {
     setGameSettingsFeedback("Tables must be a whole number (1 or more)", "error");
+    return;
+  }
+  if (maxCups === null) {
+    setGameSettingsFeedback("Max cups must be a whole number (1 or more)", "error");
     return;
   }
 
@@ -1455,6 +1644,19 @@ document.getElementById("save-game-settings-btn").addEventListener("click", asyn
       throw new Error(
         "Timer saved, but tables update failed: " +
           (detail.detail || "Server error " + tablesResp.status)
+      );
+    }
+
+    const maxCupsResp = await fetch(API_BASE_URL + "/heat/max-cups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+      body: JSON.stringify({ count: maxCups }),
+    });
+    if (!maxCupsResp.ok) {
+      const detail = await maxCupsResp.json().catch(() => ({}));
+      throw new Error(
+        "Timer + tables saved, but max cups update failed: " +
+          (detail.detail || "Server error " + maxCupsResp.status)
       );
     }
 

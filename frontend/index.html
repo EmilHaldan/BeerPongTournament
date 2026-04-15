@@ -229,7 +229,7 @@
           </div>
           <label class="admin-checkbox">
             <input type="checkbox" id="last-heat-checkbox" />
-            <span>Last heat (prioritise teams with fewest games for the next heat)</span>
+            <span>Wrap up game (only teams with fewest games play the next heat)</span>
           </label>
           <div class="admin-knockout-wrap">
             <button id="start-knockout-btn" class="btn primary">Start Knockout</button>
@@ -322,6 +322,10 @@
           <div class="form-group">
             <label for="tables-count">Tables</label>
             <input type="number" id="tables-count" min="1" value="8" />
+          </div>
+          <div class="form-group">
+            <label for="max-cups-count">Max cups per team</label>
+            <input type="number" id="max-cups-count" min="1" value="6" />
           </div>
           <label class="admin-checkbox">
             <input type="checkbox" id="freeze-tournament-checkbox" />

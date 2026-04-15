@@ -17,8 +17,8 @@ class MatchCreate(BaseModel):
 
     team1_name: str = Field(..., min_length=1, max_length=100, description="Name of team 1")
     team2_name: str = Field(..., min_length=1, max_length=100, description="Name of team 2")
-    team1_score: int = Field(..., ge=0, le=6, description="Score of team 1 (0–6)")
-    team2_score: int = Field(..., ge=0, le=6, description="Score of team 2 (0–6)")
+    team1_score: int = Field(..., ge=0, description="Score of team 1 (upper bound enforced server-side)")
+    team2_score: int = Field(..., ge=0, description="Score of team 2 (upper bound enforced server-side)")
     heat: int = Field(1, ge=0, description="Heat count for the match")
     phase: str = Field(
         default="regular",
@@ -64,6 +64,7 @@ class HeatState(BaseModel):
     heat_timer_started_at: str | None = None
     timer_duration: int = 480
     tables: int = 8
+    max_cups: int = 6
     phase: str = "regular"
     knockout_seeds: list[str] = []
     frozen: bool = False
@@ -96,9 +97,12 @@ class HeatInfo(BaseModel):
     timer_duration: int = 480
     timer_started_at: str | None = None
     tables: int = 8
+    max_cups: int = 6
     phase: str = "regular"
     knockout_seeds: list[str] = []
     frozen: bool = False
+    wrap_up_allowed: bool = False
+    knockout_allowed: bool = False
 
 
 # ---------------------------------------------------------------------------

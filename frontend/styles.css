@@ -152,6 +152,19 @@ thead th {
   text-align: center;
 }
 
+/* Reserve 2 lines of vertical space in every leaderboard cell so short
+   names like "Keg Kings" still produce the same row height as rows where
+   the team name wraps. ``vertical-align: middle`` centers text within
+   the reserved height. Setting ``height`` on a table-cell acts as a
+   minimum — rows stretch to honour the tallest cell. */
+#leaderboard-table tbody td {
+  vertical-align: middle;
+  line-height: 1.25;
+  /* Two lines of text (1.25em each) + the cell's top/bottom padding (0.4rem
+     × 2 at mobile) so the row height matches naturally-wrapped rows. */
+  height: calc(1.25em * 2 + 0.8rem);
+}
+
 #leaderboard-table td:not(:nth-child(2)) {
   font-weight: 700;
 }

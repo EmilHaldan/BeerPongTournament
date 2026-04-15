@@ -206,33 +206,6 @@
       <div id="admin-panel" class="admin-panel hidden">
         <h2>Admin Panel</h2>
 
-        <!-- Team Roster Upload -->
-        <div class="admin-section">
-          <h3>Team Roster Upload</h3>
-          <div class="caution-banner">
-            CAUTION: this will remove all user data and reset the tournament!
-          </div>
-          <div class="form-group">
-            <label for="roster-csv-file">CSV file (team_name, player1, player2, optional player3)</label>
-            <input type="file" id="roster-csv-file" accept=".csv,text/csv" />
-          </div>
-          <div class="form-row">
-            <button id="roster-preview-btn" class="btn secondary">Upload and preview</button>
-            <button id="roster-confirm-btn" class="btn primary" disabled>Confirm replacement</button>
-          </div>
-          <div id="roster-upload-feedback" class="inline-feedback hidden"></div>
-          <div id="roster-preview" class="roster-preview hidden">
-            <h4>Preview</h4>
-            <ul id="roster-preview-teams"></ul>
-            <h4>Players to create</h4>
-            <ul id="roster-preview-players"></ul>
-            <div id="roster-preview-errors" class="roster-preview-errors hidden">
-              <h4>Errors</h4>
-              <ul></ul>
-            </div>
-          </div>
-        </div>
-
         <!-- Heat Management -->
         <div class="admin-section">
           <h3>Heat Management</h3>
@@ -331,6 +304,33 @@
             <input type="number" id="tables-count" min="1" value="8" />
           </div>
           <button id="save-game-settings-btn" class="btn primary">Save Game Settings</button>
+        </div>
+
+        <!-- Team Roster Upload -->
+        <div class="admin-section">
+          <h3>Team Roster Upload</h3>
+          <div class="caution-banner">
+            CAUTION: this will remove all user data and reset the tournament!
+          </div>
+          <div class="form-group">
+            <label for="roster-csv-file">CSV file (team_name, player1, player2, optional player3)</label>
+            <input type="file" id="roster-csv-file" accept=".csv,text/csv" />
+          </div>
+          <div class="form-row">
+            <button id="roster-preview-btn" class="btn secondary">Upload and preview</button>
+            <button id="roster-confirm-btn" class="btn primary" disabled>Confirm replacement</button>
+          </div>
+          <div id="roster-upload-feedback" class="inline-feedback hidden"></div>
+          <div id="roster-preview" class="roster-preview hidden">
+            <h4>Preview</h4>
+            <ul id="roster-preview-teams"></ul>
+            <h4>Players to create</h4>
+            <ul id="roster-preview-players"></ul>
+            <div id="roster-preview-errors" class="roster-preview-errors hidden">
+              <h4>Errors</h4>
+              <ul></ul>
+            </div>
+          </div>
         </div>
       </div>
     </section>

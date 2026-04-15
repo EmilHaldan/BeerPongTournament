@@ -22,6 +22,7 @@ from beerpong_api.dal.players import (
     create_player,
     delete_player,
     list_players,
+    wipe_all_players,
 )
 from beerpong_api.dal.teams import (
     create_team,
@@ -29,6 +30,7 @@ from beerpong_api.dal.teams import (
     get_team_names,
     list_teams,
     replace_all_teams_and_players_from_csv,
+    wipe_all_teams,
 )
 from beerpong_api.db.models import (
     HeatInfo,
@@ -321,6 +323,36 @@ def admin_verify(
     if x_admin_token != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid admin token")
     return {"status": "ok"}
+
+
+@router.delete("/admin/teams", status_code=200)
+def admin_wipe_teams(
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> dict[str, object]:
+    """Delete every team and detach every player (admin only).
+
+    Players survive with ``team_id=None``. Matches are untouched.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    deleted = wipe_all_teams()
+    return {"deleted": deleted, "status": "ok"}
+
+
+@router.delete("/admin/players", status_code=200)
+def admin_wipe_players(
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> dict[str, object]:
+    """Delete every player and clear every team's member_ids (admin only).
+
+    Teams survive with empty ``member_ids``. Matches are untouched.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    deleted = wipe_all_players()
+    return {"deleted": deleted, "status": "ok"}
 
 
 # ── Heat ──────────────────────────────────────────────────────────────

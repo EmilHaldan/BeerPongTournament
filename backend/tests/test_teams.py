@@ -350,3 +350,70 @@ def test_upload_csv_empty_body_rejected() -> None:
     assert resp.status_code == 400
     detail = resp.json()["detail"]
     assert any(err["row"] == 0 for err in detail["errors"])
+
+
+# ── DELETE /admin/teams: wipe-all semantics ──────────────────────────
+
+
+def test_wipe_all_teams_detaches_players_and_keeps_matches() -> None:
+    """Wiping teams deletes every team, detaches every player, and leaves matches alone."""
+    # Arrange: 2 teams × 2 players, plus a match between them.
+    _register_team("Foxes", ["F1", "F2"])
+    _register_team("Wolves", ["W1", "W2"])
+    client.post(
+        "/matches",
+        json={
+            "team1_name": "Foxes",
+            "team2_name": "Wolves",
+            "team1_score": 5,
+            "team2_score": 3,
+        },
+    )
+    pre_players = client.get("/players").json()
+    assert len(pre_players) == 4
+    pre_matches = client.get("/matches").json()
+    assert len(pre_matches) == 1
+
+    # Act
+    resp = client.delete("/admin/teams", headers=ADMIN)
+
+    # Assert
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["deleted"] == 2
+
+    assert client.get("/teams").json() == []
+
+    after_players = client.get("/players").json()
+    assert len(after_players) == 4
+    assert all(p["team_id"] is None for p in after_players)
+
+    after_matches = client.get("/matches").json()
+    assert len(after_matches) == 1
+
+
+def test_wipe_all_teams_empty_state() -> None:
+    """Wiping teams with no teams present returns 200 and deleted==0."""
+    # Arrange: nothing seeded.
+
+    # Act
+    resp = client.delete("/admin/teams", headers=ADMIN)
+
+    # Assert
+    assert resp.status_code == 200
+    assert resp.json() == {"deleted": 0, "status": "ok"}
+
+
+def test_wipe_all_teams_rejects_bad_token() -> None:
+    """Wrong admin token → 403 and no state change."""
+    # Arrange
+    _register_team("Keep", ["Ka", "Kb"])
+
+    # Act
+    resp = client.delete("/admin/teams", headers={"X-Admin-Token": "wrong"})
+
+    # Assert
+    assert resp.status_code == 403
+    teams = client.get("/teams").json()
+    assert len(teams) == 1

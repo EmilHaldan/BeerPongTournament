@@ -471,7 +471,7 @@ async function loadMatches() {
 function renderMatches(matches) {
   const tbody = document.getElementById("matches-body");
   if (matches.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No matches yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No matches yet</td></tr>';
     return;
   }
   tbody.innerHTML = matches
@@ -479,8 +479,7 @@ function renderMatches(matches) {
       (m) => `
     <tr>
       <td>${escapeHtml(m.team1_name)}</td>
-      <td class="score-cell">${m.team1_score}</td>
-      <td class="score-cell">${m.team2_score}</td>
+      <td class="score-cell">${m.team1_score} - ${m.team2_score}</td>
       <td>${escapeHtml(m.team2_name)}</td>
       <td class="score-cell">${m.heat}</td>
       <td class="date-cell">${formatDate(m.created_at)}</td>
@@ -1379,10 +1378,10 @@ function applyTeamHighlight() {
       if (nameCell && nameCell.textContent === highlightedTeam) nameCell.classList.add(cls);
     });
 
-    // Match history — team1 (col 1) and team2 (col 4)
+    // Match history — team1 (col 1) and team2 (col 3) after score columns merged
     document.querySelectorAll("#matches-body tr").forEach(tr => {
       const t1 = tr.querySelector("td:nth-child(1)");
-      const t2 = tr.querySelector("td:nth-child(4)");
+      const t2 = tr.querySelector("td:nth-child(3)");
       if (t1 && t1.textContent === highlightedTeam) t1.classList.add(cls);
       if (t2 && t2.textContent === highlightedTeam) t2.classList.add(cls);
     });

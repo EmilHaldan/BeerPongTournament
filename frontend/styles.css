@@ -368,8 +368,8 @@ tbody tr:hover {
     letter-spacing: 0.02em;
   }
 
-  #matches-table th:nth-child(6),
-  #matches-table td:nth-child(6) {
+  #matches-table th:nth-child(5),
+  #matches-table td:nth-child(5) {
     display: none;
   }
 
@@ -390,7 +390,7 @@ tbody tr:hover {
 }
 
 #matches-table td:nth-child(1),
-#matches-table td:nth-child(4) {
+#matches-table td:nth-child(3) {
   white-space: nowrap;
 }
 

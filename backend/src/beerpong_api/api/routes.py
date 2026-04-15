@@ -10,6 +10,8 @@ from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 from beerpong_api.dal.heat import (
     advance_heat,
     get_heat_info,
+    is_frozen,
+    set_frozen,
     set_heat,
     set_tables,
     set_timer_duration,
@@ -101,6 +103,12 @@ def create_match(payload: MatchCreate) -> MatchResult:
     The heat value is locked to the current heat.
     """
     from beerpong_api.dal.heat import get_current_heat
+
+    if is_frozen():
+        raise HTTPException(
+            status_code=400,
+            detail="Tournament is frozen. Unfreeze it in Game Settings to add scores.",
+        )
 
     registered = get_team_names()
     t1 = payload.team1_name.strip().title()
@@ -323,6 +331,23 @@ def admin_reset(
     return {"deleted": deleted, "status": "ok"}
 
 
+@router.post("/admin/reset-tournament", status_code=200)
+def admin_reset_tournament(
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> dict[str, object]:
+    """Full tournament reset: delete all matches and rewind to heat 1.
+
+    Teams and players are preserved. Matchups are regenerated for heat 1.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+
+    deleted = reset_matches()
+    set_heat(1)
+    return {"deleted": deleted, "current_heat": 1, "status": "ok"}
+
+
 @router.post("/admin/verify", status_code=200)
 def admin_verify(
     x_admin_token: str = Header(..., alias="X-Admin-Token"),
@@ -464,3 +489,21 @@ def set_tables_route(
             ),
         )
     return set_tables(count)
+
+
+@router.post("/heat/frozen", response_model=HeatInfo, status_code=200)
+def set_frozen_route(
+    payload: dict[str, bool],
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> HeatInfo:
+    """Freeze or unfreeze the tournament (admin only).
+
+    While frozen, POST /matches is rejected with HTTP 400.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    frozen = payload.get("frozen")
+    if frozen is None:
+        raise HTTPException(status_code=400, detail="Missing 'frozen' boolean in payload")
+    return set_frozen(frozen)

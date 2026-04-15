@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 from beerpong_api.dal.leaderboard import compute_leaderboard
 from beerpong_api.dal.matches import list_matches
-from beerpong_api.dal.teams import get_team_names
+from beerpong_api.dal.teams import get_active_team_names
 from beerpong_api.db.client import get_state_container
 from beerpong_api.db.models import HeatInfo, HeatMatchup, HeatState, LeaderboardEntry
 
@@ -122,7 +122,7 @@ def generate_matchups(last_heat: bool = False) -> tuple[list[HeatMatchup], list[
     list of team names that should not play this heat (sorted alphabetically).
     """
     leaderboard = compute_leaderboard()
-    all_team_names = sorted(get_team_names())
+    all_team_names = sorted(get_active_team_names())
     n = len(all_team_names)
 
     if n < 2:
@@ -138,8 +138,12 @@ def generate_matchups(last_heat: bool = False) -> tuple[list[HeatMatchup], list[
 
     tables = _get_heat_state().tables
     constrained = tables * 2 < n
+    # An odd team count means one team must sit out every heat. Round-robin's
+    # BYE padding silently drops a team without reporting it, so route odd
+    # counts through the balance path which tracks the sitter explicitly.
+    odd = n % 2 == 1
 
-    if constrained or last_heat:
+    if constrained or last_heat or odd:
         return _generate_balance_matchups(all_team_names, leaderboard, score_map, tables)
 
     return (_generate_round_robin_matchups(all_team_names, leaderboard, score_map), [])
@@ -431,6 +435,7 @@ def get_heat_info() -> HeatInfo:
         timer_duration=state.timer_duration,
         timer_started_at=state.heat_timer_started_at,
         tables=state.tables,
+        frozen=state.frozen,
     )
 
 
@@ -485,3 +490,16 @@ def set_tables(count: int) -> HeatInfo:
     state.tables = count
     _save_heat_state(state)
     return get_heat_info()
+
+
+def set_frozen(frozen: bool) -> HeatInfo:
+    """Freeze or unfreeze the tournament. While frozen, POST /matches is rejected."""
+    state = _get_heat_state()
+    state.frozen = frozen
+    _save_heat_state(state)
+    return get_heat_info()
+
+
+def is_frozen() -> bool:
+    """Return True if the tournament is currently frozen."""
+    return _get_heat_state().frozen

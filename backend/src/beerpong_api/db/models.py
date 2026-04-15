@@ -57,8 +57,9 @@ class HeatState(BaseModel):
     stored_matchups: list[HeatMatchup] = []
     sitting_out: list[str] = []
     heat_timer_started_at: str | None = None
-    timer_duration: int = 600
+    timer_duration: int = 480
     tables: int = 8
+    frozen: bool = False
     tournament_id: str = Field(default="default", alias="tournamentId")
 
     model_config = {"populate_by_name": True}
@@ -85,9 +86,10 @@ class HeatInfo(BaseModel):
     teams_recorded: list[str] = []
     teams_not_recorded: list[str] = []
     teams_sitting_out: list[str] = []
-    timer_duration: int = 600
+    timer_duration: int = 480
     timer_started_at: str | None = None
     tables: int = 8
+    frozen: bool = False
 
 
 # ---------------------------------------------------------------------------

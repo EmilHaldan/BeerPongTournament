@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Beer Pong Tournament</title>
+  <title>Speed Pong Tournament</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -13,7 +13,7 @@
 
 <body>
   <header>
-    <h1 class="site-title">Beer Pong <span class="title-accent">Tournament</span></h1>
+    <h1 class="site-title">Speed Pong <span class="title-accent">Tournament</span></h1>
     <nav>
       <button class="tab active" data-tab="nextheat">Next Heat</button>
       <button class="tab" data-tab="scoreboard">Scoreboard</button>
@@ -35,7 +35,7 @@
       <table id="leaderboard-table">
         <thead>
           <tr>
-            <th>#</th>
+            <th></th>
             <th>Team</th>
             <th>Total Score</th>
             <th>Wins</th>
@@ -99,7 +99,7 @@
 
     <!-- Register score tab -->
     <section id="tab-register" class="tab-content">
-      <h2>Register Match Result<span class="subtitle">Trust based, don't be an asshole</span></h2>
+      <h2>Register Match Result</h2>
       <form id="match-form">
         <div class="form-row">
           <div class="form-group">
@@ -246,6 +246,19 @@
           <div id="add-team-success" class="success-msg hidden">Team created! ✓</div>
         </div>
 
+        <!-- Add Player -->
+        <div class="admin-section">
+          <h3>Add Player</h3>
+          <form id="add-player-form">
+            <div class="form-group">
+              <label for="new-player-name">Player Name</label>
+              <input type="text" id="new-player-name" placeholder="e.g. Alice" required />
+            </div>
+            <button type="submit" class="btn primary">Add Player</button>
+          </form>
+          <div id="add-player-success" class="success-msg hidden">Player added! ✓</div>
+        </div>
+
         <!-- Manage Teams -->
         <div class="admin-section">
           <div class="admin-section-header">
@@ -268,19 +281,6 @@
               </tr>
             </tbody>
           </table>
-        </div>
-
-        <!-- Add Player -->
-        <div class="admin-section">
-          <h3>Add Player</h3>
-          <form id="add-player-form">
-            <div class="form-group">
-              <label for="new-player-name">Player Name</label>
-              <input type="text" id="new-player-name" placeholder="e.g. Alice" required />
-            </div>
-            <button type="submit" class="btn primary">Add Player</button>
-          </form>
-          <div id="add-player-success" class="success-msg hidden">Player added! ✓</div>
         </div>
 
         <!-- Manage Players -->
@@ -313,13 +313,32 @@
           <div id="game-settings-feedback" class="inline-feedback hidden"></div>
           <div class="form-group">
             <label for="timer-duration">Match Duration (minutes)</label>
-            <input type="number" id="timer-duration" min="1" value="10" />
+            <input type="number" id="timer-duration" min="1" value="8" />
           </div>
           <div class="form-group">
             <label for="tables-count">Tables</label>
             <input type="number" id="tables-count" min="1" value="8" />
           </div>
+          <label class="admin-checkbox">
+            <input type="checkbox" id="freeze-tournament-checkbox" />
+            <span>Freeze tournament (reject new score submissions)</span>
+          </label>
+          <div id="freeze-tournament-feedback" class="inline-feedback hidden"></div>
           <button id="save-game-settings-btn" class="btn primary">Save Game Settings</button>
+          <button id="reset-tournament-btn" class="btn danger">Reset Tournament</button>
+          <div id="reset-tournament-feedback" class="inline-feedback hidden"></div>
+        </div>
+
+        <!-- Reset tournament confirmation modal -->
+        <div id="reset-tournament-modal" class="modal hidden">
+          <div class="modal-content">
+            <h3>Reset tournament?</h3>
+            <p>This will delete all scores and rewind to Heat 1. Teams and players are kept.</p>
+            <div class="modal-actions">
+              <button id="reset-tournament-cancel" class="btn secondary">Cancel</button>
+              <button id="reset-tournament-confirm" class="btn danger" disabled>Confirm (3)</button>
+            </div>
+          </div>
         </div>
 
         <!-- Team Roster Upload -->
@@ -356,52 +375,69 @@
       <img src="images/major_league_beer_pong_logo.png" alt="Major League Beer Pong logo" class="rules-logo" />
       <h2>Rules</h2>
 
-      <h3>The Setup</h3>
+      <h3>Tournament Format</h3>
       <ul>
-        <li>6 cups per side, arranged in a triangle rack</li>
-        <li>Cups are filled with beer (or water if preferred)</li>
-        <li>Tables should be roughly 8 feet long</li>
+        <li>Matches are organised into <strong><span id="rules-heat-minutes">10</span></strong> minute heats</li>
+        <li>There will be 5 minute breaks between heats</li>
+        <li>If the number of teams is uneven, one team sits out each heat. Sitting teams rotate so no one sits two heats in a row</li>
+        <li>If a team is not present during a heat, the opponents may begin, and may shoot again 30 seconds after their last shot</li>
+        <li>Points are rewarded for each cup hit</li>
+        <li>A game is finalised when all cups are hit, or the timer is up</li>
+        <li>A player from each team registers the cups hit on a single device</li>
+      </ul>
+
+      <h3>Time Table</h3>
+      <ul>
+        <li><strong>16:30</strong> &mdash; Tournament starts!</li>
+        <li><strong>17:20 – 17:40</strong> &mdash; Break</li>
+        <li><strong>18:30</strong> &mdash; Final Heat!</li>
+        <li><strong>18:50</strong> &mdash; Semi-finals, then Finals!</li>
       </ul>
 
       <h3>Gameplay</h3>
       <ul>
-        <li>Each team takes turns throwing 2 balls per turn (one per player)</li>
-        <li>If a ball lands in a cup, that cup is removed and the opposing team drinks it</li>
-        <li>Bounce shots count for 2 cups &mdash; but the defending team may swat them out of the air</li>
-        <li>If both players on a team hit cups on the same turn, they get the balls back for one extra throw ("balls back")</li>
+        <li>Each team throws 2 balls</li>
+        <li>If a ball lands in a cup, remove the cup (drinking is optional)</li>
+        <li>Bounce shots count for 2 cups &mdash; but the defending team may swat them</li>
       </ul>
 
-      <h3>Re-racks</h3>
+      <h3>The Setup</h3>
       <ul>
-        <li>The defending team may request a re-rack when 6, 3, 2, or 1 cups remain</li>
-        <li>One re-rack per game per team unless house rules say otherwise</li>
-      </ul>
-
-      <h3>Island</h3>
-      <ul>
-        <li>A player may "call an island" on an isolated cup (not touching any other cup)</li>
-        <li>If the called cup is hit, it counts as 2 cups</li>
-        <li>If a different cup is hit instead, it does NOT count</li>
-      </ul>
-
-      <h3>Winning</h3>
-      <ul>
-        <li>First team to eliminate all the opponent's cups wins &mdash; subject to redemption</li>
-        <li>Redemption: after losing the last cup, the losing team gets one final turn. If they clear the remaining cups, the game goes to sudden-death with 3 cups each side</li>
+        <li>6 cups on each side, arranged as a triangle</li>
+        <li>Cups are filled up 1/4 - 1/3 with water</li>
       </ul>
 
       <h3>Fouls</h3>
       <ul>
-        <li>Elbows must stay behind the edge of the table when throwing</li>
-        <li>Interfering with a ball in flight (other than swatting a bounce) is a foul &mdash; the opposing team may remove one of your cups</li>
+        <li>INGEN ALBUUUUEEE!!!</li>
+        <li>Interfering with a ball in flight is penalised by removing a cup on the defenders team (defenders pick)</li>
       </ul>
 
-      <h3>Tournament Format</h3>
+      <h3>Multi-cup points</h3>
       <ul>
-        <li>Matches are organised into "heats" &mdash; a batch of parallel games</li>
-        <li>Each match is a single game, no best-of</li>
-        <li>Leaderboard tracks wins and total cups hit</li>
-        <li>Ties are recorded but count as neither a win nor a loss</li>
+        <li>A bounce only counts if it bounced on the table at least once</li>
+        <li>If both players on a team hit 2 different cups, they get their balls back</li>
+        <li>If both players on a team both hit the same cup, 3 cups are removed (defenders pick) and they get their balls back</li>
+        <li>If a multi-cup shot is hit, it cannot eliminate the last remaining cup</li>
+      </ul>
+
+      <h3>Re-Racks</h3>
+      <ul>
+        <li>One re-rack per turn</li>
+        <li>Standard re-rack formats</li>
+      </ul>
+
+      <h3>Island/Loner</h3>
+      <ul>
+        <li>A player may call "Island" or "Loner" on a cup that is 1 cup distance away from any other cups</li>
+        <li>If the cup is hit, it counts as 2 cups</li>
+        <li>If a different cup is hit instead, it does NOT count</li>
+        <li>If no cups are hit, there are no consequences</li>
+      </ul>
+
+      <h3>Redemption</h3>
+      <ul>
+        <li>In SpeedPong, there is NO redemption!</li>
       </ul>
     </section>
 

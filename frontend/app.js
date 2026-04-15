@@ -2,6 +2,7 @@
 
 // Current matchups cache (populated from heat info)
 let currentMatchups = [];
+let currentSittingOut = [];
 
 // Timer state
 let timerInterval = null;
@@ -222,7 +223,10 @@ function showError(msg) {
   const banner = document.getElementById("error-banner");
   banner.textContent = msg;
   banner.classList.remove("hidden");
-  setTimeout(() => banner.classList.add("hidden"), 5000);
+  // Error banner lives on top of the DOM and is not re-rendered by the 1s
+  // board-polling cycle, so its visibility is purely driven by this timeout.
+  // 12s keeps it readable on mobile without lingering indefinitely.
+  setTimeout(() => banner.classList.add("hidden"), 12000);
 }
 
 function showSuccess() {
@@ -257,7 +261,7 @@ function renderLeaderboard(entries) {
     .map(
       (e, i) => `
     <tr>
-      <td>${i < 3 ? medals[i] : i + 1}</td>
+      <td>${i < 3 ? medals[i] : (i + 1) + "."}</td>
       <td>${escapeHtml(e.team_name)}</td>
       <td>${e.total_score}</td>
       <td>${e.total_wins}</td>
@@ -622,10 +626,13 @@ function renderRegisteredPlayers(players, teams) {
 }
 
 function populateTeamDropdowns() {
-  // Filter 0-member teams out client-side since /teams/names does not.
+  // Exclude 0-member teams AND teams that are sitting out this heat — they
+  // have no matchup, so they can't register a score.
+  const sittingSet = new Set(currentSittingOut || []);
   const names = (teamsCache || [])
     .filter(t => (t.member_ids || []).length > 0)
     .map(t => t.name)
+    .filter(name => !sittingSet.has(name))
     .sort((a, b) => a.localeCompare(b));
   const selects = [document.getElementById("team1_name"), document.getElementById("team2_name")];
   selects.forEach((sel) => {
@@ -721,11 +728,18 @@ function stopBoardPolling() {
 function renderHeatInfo(heatInfo) {
   // Cache matchups for auto-select in Register Score
   currentMatchups = heatInfo.matchups || [];
+  currentSittingOut = heatInfo.teams_sitting_out || [];
 
   document.getElementById("heat-number").textContent = heatInfo.current_heat;
 
   // Update timer display
-  updateTimerDisplay(heatInfo.timer_started_at, heatInfo.timer_duration || 600);
+  updateTimerDisplay(heatInfo.timer_started_at, heatInfo.timer_duration || 480);
+
+  // Update rules page heat-minutes placeholder
+  const rulesMinutesEl = document.getElementById("rules-heat-minutes");
+  if (rulesMinutesEl) {
+    rulesMinutesEl.textContent = Math.max(1, Math.round((heatInfo.timer_duration || 480) / 60));
+  }
 
   const container = document.getElementById("heat-matchups");
 
@@ -816,6 +830,10 @@ async function loadCurrentHeat() {
     if (!resp.ok) throw new Error("Failed to load heat");
     const data = await resp.json();
     document.getElementById("heat").value = data.current_heat;
+    // Refresh sitting-out cache + rebuild dropdowns so teams that aren't
+    // playing this heat don't appear in Register Score.
+    currentSittingOut = data.teams_sitting_out || [];
+    populateTeamDropdowns();
   } catch (err) {
     // Silently fall back to 1
     document.getElementById("heat").value = 1;
@@ -917,12 +935,16 @@ async function loadAdminHeatInfo() {
     updateAdminHeat(data.current_heat);
     const durationInput = document.getElementById("timer-duration");
     if (durationInput) {
-      const minutes = Math.max(1, Math.round((data.timer_duration || 600) / 60));
+      const minutes = Math.max(1, Math.round((data.timer_duration || 480) / 60));
       durationInput.value = String(minutes);
     }
     const tablesInput = document.getElementById("tables-count");
     if (tablesInput) {
       tablesInput.value = String(data.tables || 8);
+    }
+    const freezeCheckbox = document.getElementById("freeze-tournament-checkbox");
+    if (freezeCheckbox) {
+      freezeCheckbox.checked = !!data.frozen;
     }
   } catch (err) {
     // ignore
@@ -1313,6 +1335,19 @@ document.getElementById("save-game-settings-btn").addEventListener("click", asyn
       );
     }
 
+    // Re-run matchmaking for the current heat so the new tables count takes
+    // effect immediately (same behaviour as pressing "Set Heat" to the same
+    // number).
+    const heatResp = await fetch(API_BASE_URL + "/heat");
+    const heatData = heatResp.ok ? await heatResp.json() : null;
+    if (heatData) {
+      await fetch(API_BASE_URL + "/heat/set", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+        body: JSON.stringify({ heat: heatData.current_heat }),
+      });
+    }
+
     btn.textContent = "Saved!";
     setGameSettingsFeedback("Game settings saved.", "success");
     setTimeout(() => { btn.textContent = "Save Game Settings"; }, 2000);
@@ -1322,6 +1357,105 @@ document.getElementById("save-game-settings-btn").addEventListener("click", asyn
     loadHeatInfo();
   } catch (err) {
     setGameSettingsFeedback(err.message, "error");
+  }
+});
+
+// Reset-tournament: opens a modal with a 3s cooldown on the Confirm button.
+// Cancel is always enabled.
+(() => {
+  const btn = document.getElementById("reset-tournament-btn");
+  const modal = document.getElementById("reset-tournament-modal");
+  const confirmBtn = document.getElementById("reset-tournament-confirm");
+  const cancelBtn = document.getElementById("reset-tournament-cancel");
+  const feedback = document.getElementById("reset-tournament-feedback");
+  if (!btn || !modal || !confirmBtn || !cancelBtn) return;
+
+  let countdownTimer = null;
+
+  function closeModal() {
+    modal.classList.add("hidden");
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "Confirm (3)";
+  }
+
+  btn.addEventListener("click", () => {
+    modal.classList.remove("hidden");
+    confirmBtn.disabled = true;
+    let remaining = 3;
+    confirmBtn.textContent = `Confirm (${remaining})`;
+    countdownTimer = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(countdownTimer); countdownTimer = null;
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "Confirm";
+      } else {
+        confirmBtn.textContent = `Confirm (${remaining})`;
+      }
+    }, 1000);
+  });
+
+  cancelBtn.addEventListener("click", closeModal);
+
+  confirmBtn.addEventListener("click", async () => {
+    if (confirmBtn.disabled) return;
+    try {
+      const resp = await fetch(API_BASE_URL + "/admin/reset-tournament", {
+        method: "POST",
+        headers: { "X-Admin-Token": adminToken },
+      });
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail.detail || "Server error " + resp.status);
+      }
+      closeModal();
+      if (feedback) {
+        feedback.textContent = "Tournament reset to Heat 1.";
+        feedback.className = "inline-feedback success";
+        setTimeout(() => feedback.classList.add("hidden"), 3000);
+      }
+      loadAdminHeatInfo();
+      loadHeatInfo();
+      loadMatches();
+      loadLeaderboard();
+    } catch (err) {
+      if (feedback) {
+        feedback.textContent = "Reset failed: " + err.message;
+        feedback.className = "inline-feedback error";
+      }
+      closeModal();
+    }
+  });
+})();
+
+// Freeze-tournament checkbox: fires on change. Independent of the Save button
+// because freezing should take effect immediately.
+document.getElementById("freeze-tournament-checkbox").addEventListener("change", async (e) => {
+  const frozen = e.target.checked;
+  const feedback = document.getElementById("freeze-tournament-feedback");
+  try {
+    const resp = await fetch(API_BASE_URL + "/heat/frozen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+      body: JSON.stringify({ frozen }),
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      throw new Error(detail.detail || "Server error " + resp.status);
+    }
+    if (feedback) {
+      feedback.textContent = frozen ? "Tournament frozen." : "Tournament unfrozen.";
+      feedback.className = "inline-feedback success";
+      setTimeout(() => { feedback.classList.add("hidden"); }, 2000);
+    }
+  } catch (err) {
+    // Revert the checkbox on failure.
+    e.target.checked = !frozen;
+    if (feedback) {
+      feedback.textContent = "Failed to update freeze state: " + err.message;
+      feedback.className = "inline-feedback error";
+    }
   }
 });
 

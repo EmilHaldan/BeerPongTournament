@@ -198,7 +198,10 @@ document.querySelectorAll(".tab").forEach((btn) => {
     if (btn.dataset.tab === "scoreboard") startBoardPolling();
     else stopBoardPolling();
     if (btn.dataset.tab === "matches") loadMatches();
-    if (btn.dataset.tab === "teams") loadTeamsAndPlayers();
+    if (btn.dataset.tab === "teams") {
+      loadTeamsAndPlayers();
+      setTeamsTabView(highlightedPlayer ? "teams" : "players");
+    }
     if (btn.dataset.tab === "nextheat") startHeatPolling();
     else stopHeatPolling();
     if (btn.dataset.tab === "admin") loadAdminHeatInfo();
@@ -558,7 +561,7 @@ function renderTeams(teams, players) {
   // Public Teams tab hides 0-member teams entirely — admin-only per spec.
   const visible = (teams || []).filter(t => (t.member_ids || []).length > 0);
   if (visible.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-msg">No teams registered yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="empty-msg">No teams registered yet</td></tr>';
     return;
   }
   tbody.innerHTML = visible
@@ -566,20 +569,16 @@ function renderTeams(teams, players) {
       (t, i) => {
         const memberNames = (t.member_ids || [])
           .map(pid => _playerNameById(players || [], pid))
-          .filter(n => n.length > 0);
+          .filter(n => n.length > 0)
+          .sort((a, b) => a.localeCompare(b));
         const memberSpans = memberNames
           .map(name => `<span class="team-member-name" data-player="${escapeHtml(name)}">${escapeHtml(name)}</span>`)
-          .join(", ");
-        // The team checkbox stays checked whenever the active team matches —
-        // including when a player on that team is the primary selection, since
-        // player selection auto-checks the parent team.
-        const teamChecked = highlightedTeam === t.name ? "checked" : "";
+          .join("<br>");
         return `
     <tr>
       <td>${i + 1}</td>
       <td class="team-name-cell" data-team="${escapeHtml(t.name)}">${escapeHtml(t.name)}</td>
       <td>${memberSpans}</td>
-      <td><input type="checkbox" class="team-check" data-team="${escapeHtml(t.name)}" ${teamChecked} /></td>
     </tr>`;
       }
     )
@@ -1439,17 +1438,36 @@ function _clearHighlights() {
   applyTeamHighlight();
 }
 
-// Event delegation for team + player checkboxes — mutual exclusion across
-// both sets, with the player→team auto-resolve rule.
-document.getElementById("teams-body").addEventListener("change", (e) => {
-  const target = e.target;
-  if (target.classList.contains("team-check")) {
-    if (target.checked) {
-      _selectTeam(target.dataset.team);
-    } else {
-      // Any uncheck clears both highlights (simple model per spec).
-      _clearHighlights();
-    }
+// Teams tab: toggle between Players view and Teams view.
+function setTeamsTabView(view) {
+  const target = view === "teams" ? "teams" : "players";
+  document.getElementById("teams-view-teams").classList.toggle("active", target === "teams");
+  document.getElementById("teams-view-players").classList.toggle("active", target === "players");
+  document.querySelectorAll(".teams-view-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.view === target);
+  });
+}
+
+document.querySelectorAll(".teams-view-btn").forEach(btn => {
+  btn.addEventListener("click", () => setTeamsTabView(btn.dataset.view));
+});
+
+// Click-to-select on name cells. Clicking an already-selected name clears it.
+document.getElementById("teams-body").addEventListener("click", (e) => {
+  const memberEl = e.target.closest(".team-member-name");
+  if (memberEl) {
+    const playerName = memberEl.dataset.player;
+    if (highlightedPlayer === playerName) { _clearHighlights(); return; }
+    const fromCache = (playersCache || []).find(p => p.name === playerName);
+    const teamName = fromCache ? _teamNameByPlayerId(teamsCache || [], fromCache.team_id) : "";
+    _selectPlayer(playerName, teamName);
+    return;
+  }
+  const teamEl = e.target.closest(".team-name-cell");
+  if (teamEl) {
+    const teamName = teamEl.dataset.team;
+    if (highlightedTeam === teamName && !highlightedPlayer) { _clearHighlights(); return; }
+    _selectTeam(teamName);
   }
 });
 
@@ -1458,8 +1476,6 @@ document.getElementById("players-body").addEventListener("change", (e) => {
   if (!target.classList.contains("player-check")) return;
   if (target.checked) {
     const playerName = target.dataset.player;
-    // Prefer the fresh cache over the dataset, which could be stale if the
-    // player was reassigned between renders. Fall back to the dataset.
     const fromCache = (playersCache || []).find(p => p.name === playerName);
     let teamName = target.dataset.team || "";
     if (fromCache) {

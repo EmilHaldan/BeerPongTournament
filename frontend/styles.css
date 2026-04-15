@@ -425,11 +425,41 @@ tbody tr:hover {
 
 .heat-display {
   text-align: center;
-  padding: 0.8rem 1.5rem;
-  background: var(--surface);
-  border-radius: var(--radius);
+  padding: 1.2rem 0;
+  background: transparent;
+  border: 0;
   margin-bottom: 1.5rem;
-  border: 1px solid var(--surface2);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.heat-display::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("images/major_league_beer_pong_logo.png?v=6");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  opacity: 1;
+  transform: scaleX(-1);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.heat-display > * {
+  position: relative;
+  z-index: 1;
+}
+
+.rules-logo {
+  display: block;
+  margin: 0 auto 1rem;
+  max-width: 330px;
+  width: 90%;
+  height: auto;
+  transform: scaleX(-1);
 }
 
 .heat-info-row {
@@ -511,14 +541,14 @@ tbody tr:hover {
   background:
     linear-gradient(
       to right,
-      rgba(229, 57, 53, 0.7) 0%,
-      rgba(229, 57, 53, 0.7) 15%,
+      rgba(237, 33, 36, 1) 0%,
+      rgba(237, 33, 36, 1) 15%,
       transparent 45%
     ),
     linear-gradient(
       to left,
-      rgba(30, 136, 229, 0.7) 0%,
-      rgba(30, 136, 229, 0.7) 15%,
+      rgba(0, 0, 202, 1) 0%,
+      rgba(0, 0, 202, 1) 15%,
       transparent 45%
     ),
     var(--bg);
@@ -915,7 +945,37 @@ tbody tr:hover {
   text-shadow: 0 0 8px rgba(46, 204, 113, 0.7);
 }
 
-.team-check,
+#teams-body .team-name-cell,
+#teams-body .team-member-name {
+  cursor: pointer;
+}
+
+/* ── Teams tab view toggle ─────────────────────────────────────────── */
+.teams-view-toggle {
+  display: flex;
+  gap: 0;
+  margin: 0 auto 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  overflow: hidden;
+  width: fit-content;
+}
+.teams-view-btn {
+  background: transparent;
+  color: var(--accent);
+  border: 0;
+  padding: 0.4rem 1.1rem;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.teams-view-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+.teams-view { display: none; }
+.teams-view.active { display: block; }
+
 .player-check {
   width: 18px;
   height: 18px;

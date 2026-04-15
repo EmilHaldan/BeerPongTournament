@@ -155,39 +155,47 @@
 
     <!-- Teams tab -->
     <section id="tab-teams" class="tab-content">
-      <h2>Registered Teams</h2>
-      <table id="teams-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Team Name</th>
-            <th>Members</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="teams-body">
-          <tr>
-            <td colspan="4" class="empty-msg">No teams registered yet</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="teams-view-toggle" role="tablist">
+        <button type="button" class="teams-view-btn active" data-view="players" role="tab">Players</button>
+        <button type="button" class="teams-view-btn" data-view="teams" role="tab">Teams</button>
+      </div>
 
-      <h2>Registered Players</h2>
-      <table id="players-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Name</th>
-            <th>Team</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="players-body">
-          <tr>
-            <td colspan="4" class="empty-msg">No players registered yet</td>
-          </tr>
-        </tbody>
-      </table>
+      <div id="teams-view-teams" class="teams-view">
+        <h2>Registered Teams</h2>
+        <table id="teams-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Team Name</th>
+              <th>Members</th>
+            </tr>
+          </thead>
+          <tbody id="teams-body">
+            <tr>
+              <td colspan="3" class="empty-msg">No teams registered yet</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="teams-view-players" class="teams-view active">
+        <h2>Registered Players</h2>
+        <table id="players-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Team</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="players-body">
+            <tr>
+              <td colspan="4" class="empty-msg">No players registered yet</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <!-- Admin tab -->
@@ -345,6 +353,7 @@
 
     <!-- Rules tab -->
     <section id="tab-rules" class="tab-content">
+      <img src="images/major_league_beer_pong_logo.png" alt="Major League Beer Pong logo" class="rules-logo" />
       <h2>Rules</h2>
 
       <h3>The Setup</h3>

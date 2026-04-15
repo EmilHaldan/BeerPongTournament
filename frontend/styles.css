@@ -509,8 +509,18 @@ tbody tr:hover {
   justify-content: center;
   gap: 1rem;
   background:
-    linear-gradient(to right, rgba(229, 57, 53, 0.55), transparent 45%),
-    linear-gradient(to left, rgba(30, 136, 229, 0.55), transparent 45%),
+    linear-gradient(
+      to right,
+      rgba(229, 57, 53, 0.7) 0%,
+      rgba(229, 57, 53, 0.7) 15%,
+      transparent 45%
+    ),
+    linear-gradient(
+      to left,
+      rgba(30, 136, 229, 0.7) 0%,
+      rgba(30, 136, 229, 0.7) 15%,
+      transparent 45%
+    ),
     var(--bg);
   border: 2px solid var(--surface2);
   border-radius: var(--radius);

@@ -451,7 +451,9 @@ document.getElementById("match-form").addEventListener("submit", async (e) => {
       throw new Error(detail.detail || "Server error " + resp.status);
     }
     form.reset();
-    showScoreAnimation(body.team1_name, body.team1_score, body.team2_name, body.team2_score);
+    // DEV ONLY — animation temporarily disabled while iterating on the UI.
+    // MUST be re-enabled before deploying. Uncomment the next line:
+    // showScoreAnimation(body.team1_name, body.team1_score, body.team2_name, body.team2_score);
   } catch (err) {
     showError("Failed to submit: " + err.message);
   }

@@ -361,10 +361,11 @@ tbody tr:hover {
   #leaderboard-table th,
   #leaderboard-table td {
     padding: 0.4rem 0.2rem;
+    font-size: 1rem;
   }
 
   #leaderboard-table thead th {
-    font-size: 0.65rem;
+    font-size: 0.9rem;
     letter-spacing: 0.02em;
   }
 
@@ -392,6 +393,12 @@ tbody tr:hover {
 #matches-table td:nth-child(1),
 #matches-table td:nth-child(3) {
   white-space: nowrap;
+  text-align: left;
+}
+
+#matches-table th:nth-child(1),
+#matches-table th:nth-child(3) {
+  text-align: left;
 }
 
 .score-cell {
@@ -425,12 +432,15 @@ tbody tr:hover {
 
 .heat-display {
   text-align: center;
-  padding: 1.2rem 0;
+  padding: 0;
   background: transparent;
   border: 0;
   margin-bottom: 1.5rem;
   position: relative;
-  overflow: hidden;
+  aspect-ratio: 324 / 156;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   isolation: isolate;
 }
 
@@ -441,7 +451,7 @@ tbody tr:hover {
   background-image: url("images/major_league_beer_pong_logo.png?v=6");
   background-repeat: no-repeat;
   background-position: center;
-  background-size: contain;
+  background-size: 100% 100%;
   opacity: 1;
   transform: scaleX(-1);
   pointer-events: none;
@@ -475,7 +485,7 @@ tbody tr:hover {
 
 .heat-number-label {
   font-size: 1.2rem;
-  color: var(--text-muted);
+  color: #fff;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   margin-bottom: 0.5rem;

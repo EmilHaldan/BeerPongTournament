@@ -351,13 +351,50 @@ tbody tr:hover {
     font-size: 0.85rem;
   }
 
+  /* Leaderboard has six columns — trim header size + cell padding so the
+     full "MATCHES" header fits at 375px without horizontal overflow. */
+  #leaderboard-table {
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  #leaderboard-table th,
+  #leaderboard-table td {
+    padding: 0.4rem 0.2rem;
+  }
+
+  #leaderboard-table thead th {
+    font-size: 0.65rem;
+    letter-spacing: 0.02em;
+  }
+
   #matches-table th:nth-child(6),
   #matches-table td:nth-child(6) {
     display: none;
   }
+
+  /* Shrink the match-history header row so "Team 1" / "Team 2" fit on one
+     line without wrapping at phone widths (~375px). */
+  #matches-table thead th {
+    font-size: 0.7rem;
+    padding: 0.35rem 0.3rem;
+    letter-spacing: 0.02em;
+  }
 }
 
 /* ── Match history ──────────────────────────────────────────────────── */
+
+/* Keep column headers on one line; equalise the two team-name columns. */
+#matches-table th {
+  white-space: nowrap;
+}
+
+#matches-table th:nth-child(1),
+#matches-table th:nth-child(4),
+#matches-table td:nth-child(1),
+#matches-table td:nth-child(4) {
+  width: 30%;
+}
 
 .score-cell {
   text-align: center;
@@ -493,15 +530,16 @@ tbody tr:hover {
   justify-content: center;
   gap: 0.3rem;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .matchup-name {
   font-size: 1.2rem;
   font-weight: 700;
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.2;
 }
 
 .matchup-pts {
@@ -674,12 +712,12 @@ tbody tr:hover {
   }
 
   .matchup-card {
-    gap: 0.5rem;
-    padding: 0.6rem 2rem;
+    gap: 0.4rem;
+    padding: 0.6rem 0.7rem;
   }
 
   .matchup-name {
-    font-size: 0.9rem;
+    font-size: 0.95rem;
   }
 
   .matchup-pts {

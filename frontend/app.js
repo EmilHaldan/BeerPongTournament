@@ -802,7 +802,7 @@ function renderHeatInfo(heatInfo) {
     } else {
       sittingSection.classList.remove("hidden");
       sittingList.innerHTML = sitting
-        .map((name) => `<li>${escapeHtml(name)}</li>`)
+        .map((name) => `<li data-team="${escapeHtml(name)}">${escapeHtml(name)}</li>`)
         .join("");
     }
   }
@@ -1316,6 +1316,10 @@ document.getElementById("save-game-settings-btn").addEventListener("click", asyn
     btn.textContent = "Saved!";
     setGameSettingsFeedback("Game settings saved.", "success");
     setTimeout(() => { btn.textContent = "Save Game Settings"; }, 2000);
+
+    // Refresh the Next Heat tab so the new tables count propagates to the
+    // matchups and sitting-out list without requiring a tab switch.
+    loadHeatInfo();
   } catch (err) {
     setGameSettingsFeedback(err.message, "error");
   }
@@ -1386,6 +1390,11 @@ function applyTeamHighlight() {
     // Next-heat matchup cards
     document.querySelectorAll(".matchup-name").forEach(el => {
       if (el.textContent === highlightedTeam) el.classList.add(cls);
+    });
+
+    // Next-heat sitting-out list
+    document.querySelectorAll("#heat-sitting-out-list li").forEach(el => {
+      if (el.dataset.team === highlightedTeam) el.classList.add(cls);
     });
 
     // Register Score dropdowns — glow the select when the active value matches

@@ -20,6 +20,10 @@ class MatchCreate(BaseModel):
     team1_score: int = Field(..., ge=0, le=6, description="Score of team 1 (0–6)")
     team2_score: int = Field(..., ge=0, le=6, description="Score of team 2 (0–6)")
     heat: int = Field(1, ge=0, description="Heat count for the match")
+    phase: str = Field(
+        default="regular",
+        description="Tournament phase at match time (regular | semifinals | finals)",
+    )
 
 
 class MatchResult(BaseModel):
@@ -34,6 +38,7 @@ class MatchResult(BaseModel):
     team1_score: int
     team2_score: int
     heat: int = 1
+    phase: str = "regular"
     tournament_id: str = Field(default="default", alias="tournamentId")
 
     model_config = {"populate_by_name": True}
@@ -59,6 +64,9 @@ class HeatState(BaseModel):
     heat_timer_started_at: str | None = None
     timer_duration: int = 600
     tables: int = 8
+    phase: str = "regular"
+    knockout_seeds: list[str] = []
+    frozen: bool = False
     tournament_id: str = Field(default="default", alias="tournamentId")
 
     model_config = {"populate_by_name": True}
@@ -88,6 +96,9 @@ class HeatInfo(BaseModel):
     timer_duration: int = 600
     timer_started_at: str | None = None
     tables: int = 8
+    phase: str = "regular"
+    knockout_seeds: list[str] = []
+    frozen: bool = False
 
 
 # ---------------------------------------------------------------------------

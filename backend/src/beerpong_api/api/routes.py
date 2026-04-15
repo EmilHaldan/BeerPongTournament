@@ -10,10 +10,13 @@ from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 from beerpong_api.dal.heat import (
     advance_heat,
     get_heat_info,
+    reset_tournament,
+    set_frozen,
     set_heat,
     set_tables,
     set_timer_duration,
     start_heat_timer,
+    start_knockout,
 )
 from beerpong_api.dal.leaderboard import compute_leaderboard
 from beerpong_api.dal.matches import delete_match, insert_match, list_matches, reset_matches
@@ -94,7 +97,10 @@ def create_match(payload: MatchCreate) -> MatchResult:
     saved match.  Both team names must belong to registered teams.
     The heat value is locked to the current heat.
     """
-    from beerpong_api.dal.heat import get_current_heat
+    from beerpong_api.dal.heat import get_current_heat, is_frozen
+
+    if is_frozen():
+        raise HTTPException(status_code=400, detail="Tournament is frozen")
 
     registered = get_team_names()
     t1 = payload.team1_name.strip().title()
@@ -110,7 +116,10 @@ def create_match(payload: MatchCreate) -> MatchResult:
     payload_dict["heat"] = current_heat
     locked_payload = MatchCreate(**payload_dict)
 
-    return insert_match(locked_payload)
+    try:
+        return insert_match(locked_payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/leaderboard", response_model=list[LeaderboardEntry])
@@ -340,6 +349,58 @@ def admin_wipe_teams(
     return {"deleted": deleted, "status": "ok"}
 
 
+@router.post("/admin/start-knockout", response_model=HeatInfo, status_code=200)
+def admin_start_knockout(
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> HeatInfo:
+    """Begin the top-4 single-elimination bracket (admin only).
+
+    Returns 400 when the tournament is not in the regular phase or when
+    fewer than 4 eligible teams (with members) are registered.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    try:
+        return start_knockout()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/admin/reset-tournament", status_code=200)
+def admin_reset_tournament(
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> dict[str, object]:
+    """Reset every match and every scrap of heat state (admin only).
+
+    Wipes the matches container AND resets phase / knockout_seeds / frozen
+    so the drunk-replay path is a single click.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    deleted = reset_matches()
+    reset_tournament()
+    return {"deleted": deleted, "status": "ok"}
+
+
+@router.post("/admin/freeze", response_model=HeatInfo, status_code=200)
+def admin_freeze(
+    payload: dict[str, bool],
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> HeatInfo:
+    """Freeze or unfreeze the tournament (admin only).
+
+    Body: ``{"frozen": bool}``. A frozen tournament blocks further score
+    submissions and is auto-set when the Finals match is recorded.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    frozen = bool(payload.get("frozen", False))
+    return set_frozen(frozen)
+
+
 @router.delete("/admin/players", status_code=200)
 def admin_wipe_players(
     x_admin_token: str = Header(..., alias="X-Admin-Token"),
@@ -382,7 +443,10 @@ def start_next_heat(
     if x_admin_token != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid admin token")
     last_heat = bool((payload or {}).get("last_heat", False))
-    return advance_heat(last_heat=last_heat)
+    try:
+        return advance_heat(last_heat=last_heat)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/heat/set", response_model=HeatInfo, status_code=200)

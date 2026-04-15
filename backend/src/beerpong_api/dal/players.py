@@ -178,3 +178,20 @@ def delete_player(player_id: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def wipe_all_players() -> int:
+    """Delete every player and clear every team's member_ids list.
+
+    Returns the number of players deleted. Teams are preserved with empty
+    ``member_ids`` so the dual-write invariant holds (no team left
+    referencing a non-existent player). Matches are untouched.
+    """
+    players = list_players()
+    deleted = 0
+    for player in players:
+        # delete_player already strips the player from their owning team's
+        # member_ids, so reusing it keeps the dual-write invariant intact.
+        if delete_player(player.id):
+            deleted += 1
+    return deleted

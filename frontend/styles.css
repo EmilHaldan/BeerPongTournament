@@ -259,6 +259,15 @@ tbody tr:hover {
   background: var(--accent);
 }
 
+.btn.danger {
+  background: var(--error);
+  color: #fff;
+}
+
+.btn.danger:hover {
+  filter: brightness(1.1);
+}
+
 /* ── Banners ────────────────────────────────────────────────────────── */
 
 .error-banner {
@@ -753,6 +762,26 @@ tbody tr:hover {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.admin-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-section-header h3 {
+  margin: 0;
+}
+
+.admin-section-header .btn {
+  width: auto;
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  flex-shrink: 0;
 }
 
 .admin-heat-display {

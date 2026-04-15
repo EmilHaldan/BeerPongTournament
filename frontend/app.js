@@ -1160,6 +1160,81 @@ async function deletePlayer(playerId) {
   }
 }
 
+// ── Admin: Wipe all teams / players ───────────────────────────────────
+
+function _setWipeFeedback(feedbackId, msg, kind) {
+  const el = document.getElementById(feedbackId);
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("hidden", "error", "success");
+  el.classList.add(kind);
+  if (kind === "success") {
+    setTimeout(() => { el.classList.add("hidden"); }, 3000);
+  }
+}
+
+document.getElementById("wipe-teams-btn").addEventListener("click", async () => {
+  if (!confirm("Wipe ALL teams? This deletes every team and unassigns every player. Cannot be undone.")) {
+    return;
+  }
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/admin/teams", {
+      method: "DELETE",
+      headers: { "X-Admin-Token": adminToken },
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      const msg = typeof detail.detail === "string" ? detail.detail : "Server error " + resp.status;
+      _setWipeFeedback("wipe-teams-feedback", msg, "error");
+      return;
+    }
+    const data = await resp.json();
+    _setWipeFeedback(
+      "wipe-teams-feedback",
+      `Wiped ${data.deleted} team${data.deleted === 1 ? "" : "s"}. All players are now unassigned.`,
+      "success"
+    );
+    // Teams and player team_ids both changed — refresh every cache-backed view.
+    await loadTeamsAndPlayers();
+    loadAdminTeams();
+    loadAdminPlayers();
+  } catch (err) {
+    _setWipeFeedback("wipe-teams-feedback", "Failed to wipe teams: " + err.message, "error");
+  }
+});
+
+document.getElementById("wipe-players-btn").addEventListener("click", async () => {
+  if (!confirm("Wipe ALL players? This deletes every player and empties every team's roster. Cannot be undone.")) {
+    return;
+  }
+
+  try {
+    const resp = await fetch(API_BASE_URL + "/admin/players", {
+      method: "DELETE",
+      headers: { "X-Admin-Token": adminToken },
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      const msg = typeof detail.detail === "string" ? detail.detail : "Server error " + resp.status;
+      _setWipeFeedback("wipe-players-feedback", msg, "error");
+      return;
+    }
+    const data = await resp.json();
+    _setWipeFeedback(
+      "wipe-players-feedback",
+      `Wiped ${data.deleted} player${data.deleted === 1 ? "" : "s"}. Every team roster is empty.`,
+      "success"
+    );
+    // Players and team member_ids both changed — refresh every cache-backed view.
+    await loadTeamsAndPlayers();
+    loadAdminTeams();
+    loadAdminPlayers();
+  } catch (err) {
+    _setWipeFeedback("wipe-players-feedback", "Failed to wipe players: " + err.message, "error");
+  }
+});
+
 // ── Admin: Game Settings (timer duration + tables) ─────────────────────
 
 function parsePositiveInt(raw) {

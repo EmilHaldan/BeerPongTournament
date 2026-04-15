@@ -183,6 +183,23 @@ def delete_team(team_id: str) -> bool:
     return True
 
 
+def wipe_all_teams() -> int:
+    """Delete every team and detach every player's team_id.
+
+    Returns the number of teams deleted. Players are preserved with
+    ``team_id=None`` so the dual-write invariant holds (no player left
+    pointing at a non-existent team). Matches are untouched.
+    """
+    teams = list_teams()
+    deleted = 0
+    for team in teams:
+        # delete_team already runs the per-team detach loop that keeps the
+        # dual-write invariant intact, so reuse it rather than reimplementing.
+        if delete_team(team.id):
+            deleted += 1
+    return deleted
+
+
 # ---------------------------------------------------------------------------
 # CSV upload — full replacement
 # ---------------------------------------------------------------------------

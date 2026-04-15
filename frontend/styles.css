@@ -508,7 +508,10 @@ tbody tr:hover {
   align-items: center;
   justify-content: center;
   gap: 1rem;
-  background: var(--surface);
+  background:
+    linear-gradient(to right, rgba(231, 76, 60, 0.4), transparent 45%),
+    linear-gradient(to left, rgba(52, 152, 219, 0.4), transparent 45%),
+    var(--bg);
   border: 2px solid var(--surface2);
   border-radius: var(--radius);
   padding: 0.8rem 1.2rem;

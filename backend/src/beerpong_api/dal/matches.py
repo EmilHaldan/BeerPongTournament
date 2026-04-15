@@ -6,19 +6,59 @@ from beerpong_api.db.client import get_container
 from beerpong_api.db.models import MatchCreate, MatchResult
 
 
+class DuplicateMatchError(Exception):
+    """Raised when a match for the same team pair + heat already exists."""
+
+
+_DUPLICATE_MATCH_MESSAGE = "Match has already been submitted, talk to Emil or Sophia to reset it"
+
+
 def _normalize_team_name(name: str) -> str:
     """Normalize a team name: strip whitespace and title-case."""
     return name.strip().title()
 
 
+def _match_exists_for_heat(team1: str, team2: str, heat: int) -> bool:
+    """Return True if a match already exists for the unordered team pair at ``heat``."""
+    container = get_container()
+    query = (
+        "SELECT c.team1_name, c.team2_name FROM c "
+        "WHERE c.tournamentId = 'default' AND c.heat = @heat"
+    )
+    parameters: list[dict[str, object]] = [{"name": "@heat", "value": heat}]
+    items = container.query_items(
+        query=query,
+        parameters=parameters,
+        enable_cross_partition_query=False,
+    )
+    target = frozenset({team1, team2})
+    for item in items:  # pyright: ignore[reportUnknownVariableType, reportGeneralTypeIssues]
+        existing = frozenset(
+            {
+                item.get("team1_name"),  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+                item.get("team2_name"),  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+            }
+        )
+        if existing == target:
+            return True
+    return False
+
+
 def insert_match(payload: MatchCreate) -> MatchResult:
     """Validate, normalise and persist a new match result.
 
-    Returns the saved ``MatchResult``.
+    Returns the saved ``MatchResult``. Raises ``DuplicateMatchError`` if a
+    match for the same unordered team pair already exists at the same heat.
     """
+    team1 = _normalize_team_name(payload.team1_name)
+    team2 = _normalize_team_name(payload.team2_name)
+
+    if _match_exists_for_heat(team1, team2, payload.heat):
+        raise DuplicateMatchError(_DUPLICATE_MATCH_MESSAGE)
+
     match = MatchResult(
-        team1_name=_normalize_team_name(payload.team1_name),
-        team2_name=_normalize_team_name(payload.team2_name),
+        team1_name=team1,
+        team2_name=team2,
         team1_score=payload.team1_score,
         team2_score=payload.team2_score,
         heat=payload.heat,

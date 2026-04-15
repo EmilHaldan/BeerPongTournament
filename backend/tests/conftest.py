@@ -46,6 +46,8 @@ class FakeContainer:
             items = [i for i in items if i.get("id") == params["@id"]]
         if "@team_id" in params:
             items = [i for i in items if i.get("team_id") == params["@team_id"]]
+        if "@heat" in params:
+            items = [i for i in items if i.get("heat") == params["@heat"]]
         return items
 
     def delete_item(

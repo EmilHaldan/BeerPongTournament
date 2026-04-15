@@ -173,6 +173,13 @@ def test_leaderboard_includes_total_matches() -> None:
         "/matches",
         json={"team1_name": "Alpha", "team2_name": "Beta", "team1_score": 3, "team2_score": 2},
     )
+    # Advance the server heat so the duplicate-match guard doesn't reject the
+    # second submission of the same pair.
+    client.post(
+        "/heat/set",
+        json={"heat": 2},
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
     client.post(
         "/matches",
         json={"team1_name": "Alpha", "team2_name": "Beta", "team1_score": 4, "team2_score": 1},

@@ -4,6 +4,10 @@
 let currentMatchups = [];
 let currentSittingOut = [];
 
+// Knockout bracket roster — names still active in the bracket. Empty when the
+// tournament is in regular phase; populated by renderHeatInfo during SF/F.
+let knockoutActiveTeams = [];
+
 // Timer state
 let timerInterval = null;
 let buzzerPlayed = false;
@@ -627,13 +631,18 @@ function renderRegisteredPlayers(players, teams) {
 
 function populateTeamDropdowns() {
   // Exclude 0-member teams AND teams that are sitting out this heat — they
-  // have no matchup, so they can't register a score.
+  // have no matchup, so they can't register a score. During knockout,
+  // restrict further to the teams still active in the bracket.
   const sittingSet = new Set(currentSittingOut || []);
-  const names = (teamsCache || [])
+  let names = (teamsCache || [])
     .filter(t => (t.member_ids || []).length > 0)
     .map(t => t.name)
     .filter(name => !sittingSet.has(name))
     .sort((a, b) => a.localeCompare(b));
+  if (knockoutActiveTeams && knockoutActiveTeams.length > 0) {
+    const allowed = new Set(knockoutActiveTeams);
+    names = names.filter((n) => allowed.has(n));
+  }
   const selects = [document.getElementById("team1_name"), document.getElementById("team2_name")];
   selects.forEach((sel) => {
     const current = sel.value;
@@ -730,7 +739,74 @@ function renderHeatInfo(heatInfo) {
   currentMatchups = heatInfo.matchups || [];
   currentSittingOut = heatInfo.teams_sitting_out || [];
 
-  document.getElementById("heat-number").textContent = heatInfo.current_heat;
+  // Phase-aware heat-number display: SF / F / numeric.
+  const phase = heatInfo.phase || "regular";
+  const heatNumEl = document.getElementById("heat-number");
+  if (phase === "semifinals") {
+    heatNumEl.textContent = "SF";
+  } else if (phase === "finals" || phase === "complete") {
+    heatNumEl.textContent = "F";
+  } else {
+    heatNumEl.textContent = heatInfo.current_heat;
+  }
+
+  // Matchups heading text + gold-glow class (Finals only).
+  const headingEl = document.getElementById("heat-matchups-heading");
+  if (headingEl) {
+    if (phase === "semifinals") {
+      headingEl.textContent = "Semi Finals";
+      headingEl.classList.remove("heading-finals");
+    } else if (phase === "finals" || phase === "complete") {
+      headingEl.textContent = "Finals";
+      headingEl.classList.add("heading-finals");
+    } else {
+      headingEl.textContent = "Matchups";
+      headingEl.classList.remove("heading-finals");
+    }
+  }
+
+  // Winner banner — visible once the Finals match is recorded.
+  const bannerEl = document.getElementById("winner-banner");
+  if (bannerEl) {
+    const finalsRecorded =
+      (phase === "complete" || (phase === "finals" && (heatInfo.matchups || []).some((m) => m.recorded))) &&
+      (heatInfo.matchups || []).length === 1 &&
+      heatInfo.matchups[0].recorded &&
+      heatInfo.matchups[0].winner;
+    if (finalsRecorded) {
+      const champ = heatInfo.matchups[0].winner;
+      bannerEl.textContent = `🏆 Champions: ${champ}`;
+      bannerEl.classList.remove("hidden");
+    } else {
+      bannerEl.textContent = "";
+      bannerEl.classList.add("hidden");
+    }
+  }
+
+  // Maintain the knockout roster used to filter Register-Score dropdowns.
+  // SF: all four seeds. F: the two finalists from the stored matchup.
+  // Complete / Regular: clear the filter.
+  const prevKnockoutActive = knockoutActiveTeams.join("|");
+  if (phase === "semifinals") {
+    knockoutActiveTeams = Array.isArray(heatInfo.knockout_seeds)
+      ? [...heatInfo.knockout_seeds]
+      : [];
+  } else if (phase === "finals") {
+    const m = (heatInfo.matchups || [])[0];
+    knockoutActiveTeams = m ? [m.team1_name, m.team2_name] : [];
+  } else {
+    knockoutActiveTeams = [];
+  }
+  if (prevKnockoutActive !== knockoutActiveTeams.join("|")) {
+    populateTeamDropdowns();
+  }
+
+  // Hide Last-heat / Start-Knockout controls outside the regular phase.
+  const lastHeatLabel = document.querySelector('label.admin-checkbox:has(#last-heat-checkbox)');
+  const knockoutBtn = document.getElementById("start-knockout-btn");
+  const knockoutWrap = knockoutBtn ? knockoutBtn.closest(".admin-knockout-wrap") : null;
+  if (lastHeatLabel) lastHeatLabel.classList.toggle("hidden", phase !== "regular");
+  if (knockoutWrap) knockoutWrap.classList.toggle("hidden", phase !== "regular");
 
   // Update timer display
   updateTimerDisplay(heatInfo.timer_started_at, heatInfo.timer_duration || 480);
@@ -918,6 +994,53 @@ document.getElementById("set-heat-btn").addEventListener("click", async () => {
   }
 });
 
+
+// Start Knockout — triggers the top-4 bracket once admin is ready.
+const startKnockoutBtn = document.getElementById("start-knockout-btn");
+if (startKnockoutBtn) {
+  startKnockoutBtn.addEventListener("click", async () => {
+    if (!confirm("Start Knockout? The top 4 teams advance to the semi-finals.")) return;
+    try {
+      const resp = await fetch(API_BASE_URL + "/admin/start-knockout", {
+        method: "POST",
+        headers: { "X-Admin-Token": adminToken },
+      });
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail.detail || "Server error " + resp.status);
+      }
+      const data = await resp.json();
+      renderHeatInfo(data);
+      updateAdminHeat(data.current_heat);
+      loadLeaderboard();
+    } catch (err) {
+      showError("Could not start knockout: " + err.message);
+    }
+  });
+}
+
+// Reset Tournament — wipes matches and resets phase/knockout/frozen.
+const resetTournamentBtn = document.getElementById("reset-tournament-btn");
+if (resetTournamentBtn) {
+  resetTournamentBtn.addEventListener("click", async () => {
+    if (!confirm("Reset the tournament? This deletes every recorded match and clears the bracket.")) return;
+    try {
+      const resp = await fetch(API_BASE_URL + "/admin/reset-tournament", {
+        method: "POST",
+        headers: { "X-Admin-Token": adminToken },
+      });
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail.detail || "Server error " + resp.status);
+      }
+      loadAdminHeatInfo();
+      loadHeatInfo();
+      loadLeaderboard();
+    } catch (err) {
+      showError("Could not reset tournament: " + err.message);
+    }
+  });
+}
 
 // ── Admin ─────────────────────────────────────────────────────────────
 

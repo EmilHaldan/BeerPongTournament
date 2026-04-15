@@ -1536,3 +1536,45 @@ tbody tr:hover {
   font-size: 0.95rem;
 }
 
+
+/* ── Knockout tournament ─────────────────────────────────────────────── */
+
+.admin-knockout-wrap {
+  text-align: center;
+  margin-top: 0.75rem;
+}
+
+#start-knockout-btn {
+  background: linear-gradient(135deg, #ffd966 0%, #ffb300 100%);
+  color: #1a1a1a;
+  border-color: #ffb300;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+#start-knockout-btn:hover {
+  background: linear-gradient(135deg, #ffdf80 0%, #ffc21f 100%);
+}
+
+.heading-finals {
+  color: #ffd700 !important;
+  text-shadow:
+    0 0 18px rgba(255, 215, 0, 0.9),
+    0 0 32px rgba(255, 215, 0, 0.6);
+  letter-spacing: 0.05em;
+}
+
+.winner-banner {
+  text-align: center;
+  margin: 1.25rem auto 0.5rem;
+  padding: 1rem 1.5rem;
+  max-width: 36rem;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #ffd700;
+  background: linear-gradient(135deg, rgba(46, 204, 113, 0.22), rgba(255, 215, 0, 0.15));
+  border: 2px solid #ffd700;
+  border-radius: 0.75rem;
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
+  box-shadow: 0 0 24px rgba(255, 215, 0, 0.35);
+}

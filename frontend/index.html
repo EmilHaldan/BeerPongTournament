@@ -65,7 +65,8 @@
           </div>
         </div>
       </div>
-      <h2 style="text-align:center; margin: 1.5rem 0 1rem;">Matchups</h2>
+      <div id="winner-banner" class="winner-banner hidden"></div>
+      <h2 id="heat-matchups-heading" style="text-align:center; margin: 1.5rem 0 1rem;">Matchups</h2>
       <div id="heat-matchups" class="heat-matchups">
         <p class="empty-msg">No matchups generated yet</p>
       </div>
@@ -230,6 +231,9 @@
             <input type="checkbox" id="last-heat-checkbox" />
             <span>Last heat (prioritise teams with fewest games for the next heat)</span>
           </label>
+          <div class="admin-knockout-wrap">
+            <button id="start-knockout-btn" class="btn primary">Start Knockout</button>
+          </div>
         </div>
 
         <!-- Create Team -->
@@ -438,6 +442,16 @@
       <h3>Redemption</h3>
       <ul>
         <li>In SpeedPong, there is NO redemption!</li>
+      </ul>
+
+      <h3>Knockout</h3>
+      <ul>
+        <li>After the regular heats, the admin triggers a top-4 single-elimination bracket</li>
+        <li>Seeding: total score, then wins, then alphabetical name</li>
+        <li>Semi-finals pair seed 1 vs seed 4 and seed 2 vs seed 3; winners meet in the Finals</li>
+        <li>Knockout matches cannot end in a tie &mdash; play sudden death, next team to score advances</li>
+        <li>Knockout results are recorded in history but do NOT affect the leaderboard</li>
+        <li>Submitting the Finals score auto-freezes the tournament and crowns the champion</li>
       </ul>
     </section>
 

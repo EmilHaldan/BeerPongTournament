@@ -154,6 +154,13 @@ def get_team_names() -> list[str]:
     return sorted(t.name for t in teams)
 
 
+def get_active_team_names() -> list[str]:
+    """Return a sorted list of team names that currently have at least one
+    member. Used by matchmaking so empty placeholder teams don't get paired."""
+    teams = list_teams()
+    return sorted(t.name for t in teams if t.member_ids)
+
+
 def delete_team(team_id: str) -> bool:
     """Delete a team by id, detaching its players first.
 

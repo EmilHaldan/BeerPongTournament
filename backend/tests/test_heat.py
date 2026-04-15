@@ -10,11 +10,19 @@ ADMIN_TOKEN = get_settings().ADMIN_TOKEN
 
 
 def _register_team(name: str, members: list[str]) -> None:
-    """Helper to register a team via the DAL."""
-    from beerpong_api.dal.teams import create_team
-    from beerpong_api.db.models import TeamCreate
+    """Helper to register a team via the DAL.
 
-    create_team(TeamCreate(name=name, members=members))
+    Phase 3 replaced the legacy ``members: list[str]`` field on ``TeamCreate``
+    with ``member_ids: list[str]`` pointing at persisted players. Create each
+    player first, then build the team with their IDs so the dual-write invariant
+    holds (Team.member_ids <-> Player.team_id).
+    """
+    from beerpong_api.dal.players import create_player
+    from beerpong_api.dal.teams import create_team
+    from beerpong_api.db.models import PlayerCreate, TeamCreate
+
+    player_ids = [create_player(PlayerCreate(name=m)).id for m in members]
+    create_team(TeamCreate(name=name, member_ids=player_ids))
 
 
 def test_get_heat_default() -> None:
@@ -172,6 +180,13 @@ def test_leaderboard_includes_total_matches() -> None:
     client.post(
         "/matches",
         json={"team1_name": "Alpha", "team2_name": "Beta", "team1_score": 3, "team2_score": 2},
+    )
+    # Advance the server heat so the duplicate-match guard doesn't reject the
+    # second submission of the same pair.
+    client.post(
+        "/heat/set",
+        json={"heat": 2},
+        headers={"X-Admin-Token": ADMIN_TOKEN},
     )
     client.post(
         "/matches",
@@ -497,6 +512,281 @@ def test_start_next_heat_accepts_last_heat_flag() -> None:
     data = resp.json()
     assert data["current_heat"] == 2
     assert "teams_sitting_out" in data
+
+
+# ── Phase 4: knockout tournament ─────────────────────────────────────
+
+
+def _post_regular_match(t1: str, t2: str, s1: int, s2: int) -> None:
+    """Shortcut for recording a regular-phase match via the API."""
+    resp = client.post(
+        "/matches",
+        json={"team1_name": t1, "team2_name": t2, "team1_score": s1, "team2_score": s2},
+    )
+    assert resp.status_code == 201
+
+
+def _register_team_with_members(name: str, player_names: list[str]) -> None:
+    """Register a team along with real Player records, so Team.member_ids is populated.
+
+    The bracket-eligibility check counts teams with at least one member,
+    so the legacy ``_register_team`` helper (which silently drops the
+    ``members=`` kwarg) cannot be used for knockout tests.
+    """
+    from beerpong_api.dal.players import create_player
+    from beerpong_api.dal.teams import create_team
+    from beerpong_api.db.models import PlayerCreate, TeamCreate
+
+    player_ids = [create_player(PlayerCreate(name=n)).id for n in player_names]
+    create_team(TeamCreate(name=name, member_ids=player_ids))
+
+
+def _seed_four_teams_with_distinct_scores() -> list[str]:
+    """Register four teams + stage regular matches so their scores differ.
+
+    Returns the expected seeding order (highest score first, alphabetical
+    tiebreaker). Totals after the three matches:
+
+    * Alpha:  2W, score 14 (cups 6+6 + 1+1 bonus)
+    * Beta:   0W, score  1 (cups 0+2 - 1 penalty)
+    * Gamma:  1W, score  7 (cups 3+3 + 1 - 0)
+    * Delta:  0W, score  3 (cups 2+2 - 1)
+    """
+    _register_team_with_members("Alpha", ["A1", "A2"])
+    _register_team_with_members("Beta", ["B1", "B2"])
+    _register_team_with_members("Gamma", ["G1", "G2"])
+    _register_team_with_members("Delta", ["D1", "D2"])
+
+    _post_regular_match("Alpha", "Beta", 6, 0)
+    _post_regular_match("Alpha", "Delta", 6, 2)
+    _post_regular_match("Gamma", "Beta", 3, 2)
+    _post_regular_match("Gamma", "Delta", 3, 2)
+
+    # Expected order: Alpha, Gamma, Delta, Beta
+    return ["Alpha", "Gamma", "Delta", "Beta"]
+
+
+def test_start_knockout_top_four_seeded_correctly() -> None:
+    """Seeds resolve via total_score desc → wins desc → name asc."""
+    # Arrange
+    expected = _seed_four_teams_with_distinct_scores()
+
+    # Act
+    resp = client.post(
+        "/admin/start-knockout",
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+
+    # Assert
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["phase"] == "semifinals"
+    assert data["knockout_seeds"] == expected
+
+
+def test_start_knockout_rejects_fewer_than_four_teams() -> None:
+    """Three eligible teams → 400 with clear message."""
+    # Arrange
+    _register_team_with_members("Alpha", ["A1", "A2"])
+    _register_team_with_members("Beta", ["B1", "B2"])
+    _register_team_with_members("Gamma", ["G1", "G2"])
+
+    # Act
+    resp = client.post(
+        "/admin/start-knockout",
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+
+    # Assert
+    assert resp.status_code == 400
+    assert "at least 4" in resp.json()["detail"]
+
+
+def test_start_knockout_pairs_one_vs_four_and_two_vs_three() -> None:
+    """SF matchups are seed[0]↔seed[3] and seed[1]↔seed[2]."""
+    # Arrange
+    expected = _seed_four_teams_with_distinct_scores()
+
+    # Act
+    resp = client.post(
+        "/admin/start-knockout",
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+
+    # Assert
+    data = resp.json()
+    matchups = data["matchups"]
+    assert len(matchups) == 2
+    pair_a = {matchups[0]["team1_name"], matchups[0]["team2_name"]}
+    pair_b = {matchups[1]["team1_name"], matchups[1]["team2_name"]}
+    assert pair_a == {expected[0], expected[3]}
+    assert pair_b == {expected[1], expected[2]}
+
+
+def test_knockout_match_scores_excluded_from_leaderboard() -> None:
+    """Matches stamped with phase != regular must not count in the leaderboard."""
+    # Arrange
+    _seed_four_teams_with_distinct_scores()
+    resp = client.post(
+        "/admin/start-knockout",
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+    matchups = resp.json()["matchups"]
+    lb_before = client.get("/leaderboard").json()
+
+    # Record both SF matches
+    for m in matchups:
+        _post_regular_match(m["team1_name"], m["team2_name"], 6, 2)
+
+    # Act
+    lb_after = client.get("/leaderboard").json()
+
+    # Assert — leaderboard is identical (knockout phase is filtered out).
+    assert lb_before == lb_after
+
+
+def test_advance_heat_semifinals_requires_both_matches_recorded() -> None:
+    """advance_heat in SF with only one match recorded raises."""
+    # Arrange
+    _seed_four_teams_with_distinct_scores()
+    resp = client.post(
+        "/admin/start-knockout",
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+    matchups = resp.json()["matchups"]
+    _post_regular_match(matchups[0]["team1_name"], matchups[0]["team2_name"], 6, 2)
+
+    # Act
+    resp = client.post(
+        "/heat/start-next",
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+
+    # Assert
+    assert resp.status_code == 400
+    assert "Semi-final" in resp.json()["detail"]
+
+
+def test_advance_heat_semifinals_to_finals_uses_correct_winners() -> None:
+    """Winners of each SF are paired into the single Finals matchup."""
+    # Arrange
+    _seed_four_teams_with_distinct_scores()
+    resp = client.post(
+        "/admin/start-knockout",
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+    matchups = resp.json()["matchups"]
+    expected_winners: set[str] = set()
+    for m in matchups:
+        # team1 wins each SF
+        _post_regular_match(m["team1_name"], m["team2_name"], 6, 2)
+        expected_winners.add(m["team1_name"])
+
+    # Act
+    resp = client.post(
+        "/heat/start-next",
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+
+    # Assert
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["phase"] == "finals"
+    assert len(data["matchups"]) == 1
+    finalists = {data["matchups"][0]["team1_name"], data["matchups"][0]["team2_name"]}
+    assert finalists == expected_winners
+
+
+def test_finals_submission_auto_freezes_tournament() -> None:
+    """Recording the Finals score auto-sets frozen=True."""
+    # Arrange — walk through SF → F
+    _seed_four_teams_with_distinct_scores()
+    resp = client.post("/admin/start-knockout", headers={"X-Admin-Token": ADMIN_TOKEN})
+    for m in resp.json()["matchups"]:
+        _post_regular_match(m["team1_name"], m["team2_name"], 6, 2)
+    resp = client.post("/heat/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
+    final = resp.json()["matchups"][0]
+    assert client.get("/heat").json()["frozen"] is False
+
+    # Act
+    _post_regular_match(final["team1_name"], final["team2_name"], 6, 3)
+
+    # Assert
+    data = client.get("/heat").json()
+    assert data["frozen"] is True
+
+
+def test_finals_submission_sets_phase_complete() -> None:
+    """After Finals is recorded, the state phase moves to 'complete'."""
+    # Arrange
+    _seed_four_teams_with_distinct_scores()
+    resp = client.post("/admin/start-knockout", headers={"X-Admin-Token": ADMIN_TOKEN})
+    for m in resp.json()["matchups"]:
+        _post_regular_match(m["team1_name"], m["team2_name"], 6, 2)
+    resp = client.post("/heat/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
+    final = resp.json()["matchups"][0]
+
+    # Act
+    _post_regular_match(final["team1_name"], final["team2_name"], 6, 4)
+
+    # Assert
+    assert client.get("/heat").json()["phase"] == "complete"
+
+
+def test_knockout_tie_rejected_with_exact_error_message() -> None:
+    """Tied SF score → 400 with the verbatim operator-facing message."""
+    # Arrange
+    _seed_four_teams_with_distinct_scores()
+    resp = client.post("/admin/start-knockout", headers={"X-Admin-Token": ADMIN_TOKEN})
+    m = resp.json()["matchups"][0]
+
+    # Act
+    resp = client.post(
+        "/matches",
+        json={
+            "team1_name": m["team1_name"],
+            "team2_name": m["team2_name"],
+            "team1_score": 4,
+            "team2_score": 4,
+        },
+    )
+
+    # Assert
+    assert resp.status_code == 400
+    assert (
+        resp.json()["detail"]
+        == "Knockout matches cannot end in a tie — play sudden death until someone scores."
+    )
+
+
+def test_admin_reset_tournament_resets_phase_and_unfreezes() -> None:
+    """reset-tournament clears phase, seeds, frozen, heat, and wipes matches."""
+    # Arrange — drive the bracket to completion so every knockout field is set.
+    _seed_four_teams_with_distinct_scores()
+    resp = client.post("/admin/start-knockout", headers={"X-Admin-Token": ADMIN_TOKEN})
+    for m in resp.json()["matchups"]:
+        _post_regular_match(m["team1_name"], m["team2_name"], 6, 2)
+    resp = client.post("/heat/start-next", headers={"X-Admin-Token": ADMIN_TOKEN})
+    final = resp.json()["matchups"][0]
+    _post_regular_match(final["team1_name"], final["team2_name"], 6, 4)
+    pre = client.get("/heat").json()
+    assert pre["frozen"] is True
+    assert pre["phase"] == "complete"
+
+    # Act
+    resp = client.post(
+        "/admin/reset-tournament",
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+    )
+
+    # Assert
+    assert resp.status_code == 200
+    post = client.get("/heat").json()
+    assert post["phase"] == "regular"
+    assert post["knockout_seeds"] == []
+    assert post["frozen"] is False
+    assert post["current_heat"] == 1
+    assert client.get("/matches").json() == []
 
 
 def test_heat_info_exposes_teams_sitting_out() -> None:

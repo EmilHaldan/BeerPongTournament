@@ -75,6 +75,9 @@ def test_create_match_rejects_negative_score() -> None:
 
 
 def test_create_match_rejects_score_above_six() -> None:
+    """Default ``max_cups`` is 6 (stored in HeatState). A score of 7 must be
+    rejected by the server-side bound check rather than Pydantic, since the
+    upper bound is now configurable via Game Settings."""
     resp = client.post(
         "/matches",
         json={
@@ -84,7 +87,8 @@ def test_create_match_rejects_score_above_six() -> None:
             "team2_score": 3,
         },
     )
-    assert resp.status_code == 422
+    assert resp.status_code == 400
+    assert "between 0 and 6" in resp.json()["detail"]
 
 
 def test_create_match_rejects_empty_name() -> None:
@@ -101,13 +105,15 @@ def test_create_match_rejects_empty_name() -> None:
 
 
 def test_admin_reset_clears_matches() -> None:
-    # Insert two matches
-    for i in range(2):
+    # Insert two matches — distinct team pairs so the duplicate-match guard
+    # doesn't reject the second one.
+    pairs = [("A", "B"), ("C", "D")]
+    for i, (t1, t2) in enumerate(pairs):
         client.post(
             "/matches",
             json={
-                "team1_name": "A",
-                "team2_name": "B",
+                "team1_name": t1,
+                "team2_name": t2,
                 "team1_score": i,
                 "team2_score": 0,
             },
@@ -124,3 +130,131 @@ def test_admin_reset_clears_matches() -> None:
 def test_admin_reset_rejects_bad_token() -> None:
     resp = client.post("/admin/reset", headers={"X-Admin-Token": "wrong"})
     assert resp.status_code == 403
+
+
+# ── Duplicate-match guard ─────────────────────────────────────────────
+
+_DUPLICATE_MESSAGE = "Match has already been submitted, talk to Emil or Sophia to reset it"
+
+
+def test_create_match_duplicate_pair_same_heat_returns_400() -> None:
+    # Arrange: first submission succeeds
+    first = client.post(
+        "/matches",
+        json={
+            "team1_name": "Alpha",
+            "team2_name": "Beta",
+            "team1_score": 6,
+            "team2_score": 4,
+        },
+    )
+    assert first.status_code == 201
+
+    # Act: second submission with identical pair + heat
+    second = client.post(
+        "/matches",
+        json={
+            "team1_name": "Alpha",
+            "team2_name": "Beta",
+            "team1_score": 3,
+            "team2_score": 2,
+        },
+    )
+
+    # Assert
+    assert second.status_code == 400
+    assert second.json()["detail"] == _DUPLICATE_MESSAGE
+
+
+def test_create_match_reversed_pair_same_heat_returns_400() -> None:
+    # Arrange
+    first = client.post(
+        "/matches",
+        json={
+            "team1_name": "Alpha",
+            "team2_name": "Beta",
+            "team1_score": 5,
+            "team2_score": 1,
+        },
+    )
+    assert first.status_code == 201
+
+    # Act: swap team1/team2 — still the same unordered pair at the same heat
+    second = client.post(
+        "/matches",
+        json={
+            "team1_name": "Beta",
+            "team2_name": "Alpha",
+            "team1_score": 2,
+            "team2_score": 4,
+        },
+    )
+
+    # Assert
+    assert second.status_code == 400
+    assert second.json()["detail"] == _DUPLICATE_MESSAGE
+
+
+def test_create_match_same_pair_different_heat_succeeds() -> None:
+    # Arrange: submit at current heat (1)
+    first = client.post(
+        "/matches",
+        json={
+            "team1_name": "Alpha",
+            "team2_name": "Beta",
+            "team1_score": 6,
+            "team2_score": 4,
+        },
+    )
+    assert first.status_code == 201
+
+    # Advance server heat to 2
+    bump = client.post(
+        "/heat/set",
+        json={"heat": 2},
+        headers={"X-Admin-Token": "changeme"},
+    )
+    assert bump.status_code == 200
+
+    # Act: same pair, new heat
+    second = client.post(
+        "/matches",
+        json={
+            "team1_name": "Alpha",
+            "team2_name": "Beta",
+            "team1_score": 3,
+            "team2_score": 5,
+        },
+    )
+
+    # Assert
+    assert second.status_code == 201
+    assert second.json()["heat"] == 2
+
+
+def test_create_match_different_pair_same_heat_succeeds() -> None:
+    # Arrange
+    first = client.post(
+        "/matches",
+        json={
+            "team1_name": "Alpha",
+            "team2_name": "Beta",
+            "team1_score": 6,
+            "team2_score": 4,
+        },
+    )
+    assert first.status_code == 201
+
+    # Act: different pair, same heat
+    second = client.post(
+        "/matches",
+        json={
+            "team1_name": "Gamma",
+            "team2_name": "Delta",
+            "team1_score": 5,
+            "team2_score": 3,
+        },
+    )
+
+    # Assert
+    assert second.status_code == 201

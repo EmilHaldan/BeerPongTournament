@@ -27,6 +27,10 @@ def compute_leaderboard() -> list[LeaderboardEntry]:
     )
 
     for match in list_matches():
+        # Knockout matches are recorded in history but must not affect
+        # the leaderboard — regular-phase play is the only thing counted.
+        if match.phase != "regular":
+            continue
         # Team 1
         stats[match.team1_name]["total_score"] += match.team1_score
         stats[match.team1_name]["total_matches"] += 1

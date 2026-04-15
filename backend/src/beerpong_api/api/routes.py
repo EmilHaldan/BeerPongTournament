@@ -10,13 +10,24 @@ from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 from beerpong_api.dal.heat import (
     advance_heat,
     get_heat_info,
+    is_frozen,
+    reset_tournament,
+    set_frozen,
     set_heat,
+    set_max_cups,
     set_tables,
     set_timer_duration,
     start_heat_timer,
+    start_knockout,
 )
 from beerpong_api.dal.leaderboard import compute_leaderboard
-from beerpong_api.dal.matches import delete_match, insert_match, list_matches, reset_matches
+from beerpong_api.dal.matches import (
+    DuplicateMatchError,
+    delete_match,
+    insert_match,
+    list_matches,
+    reset_matches,
+)
 from beerpong_api.dal.players import (
     assign_player_to_team,
     create_player,
@@ -96,6 +107,12 @@ def create_match(payload: MatchCreate) -> MatchResult:
     """
     from beerpong_api.dal.heat import get_current_heat
 
+    if is_frozen():
+        raise HTTPException(
+            status_code=400,
+            detail="Tournament is frozen. Unfreeze it in Game Settings to add scores.",
+        )
+
     registered = get_team_names()
     t1 = payload.team1_name.strip().title()
     t2 = payload.team2_name.strip().title()
@@ -110,7 +127,10 @@ def create_match(payload: MatchCreate) -> MatchResult:
     payload_dict["heat"] = current_heat
     locked_payload = MatchCreate(**payload_dict)
 
-    return insert_match(locked_payload)
+    try:
+        return insert_match(locked_payload)
+    except (DuplicateMatchError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/leaderboard", response_model=list[LeaderboardEntry])
@@ -340,6 +360,41 @@ def admin_wipe_teams(
     return {"deleted": deleted, "status": "ok"}
 
 
+@router.post("/admin/start-knockout", response_model=HeatInfo, status_code=200)
+def admin_start_knockout(
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> HeatInfo:
+    """Begin the top-4 single-elimination bracket (admin only).
+
+    Returns 400 when the tournament is not in the regular phase or when
+    fewer than 4 eligible teams (with members) are registered.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    try:
+        return start_knockout()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/admin/reset-tournament", status_code=200)
+def admin_reset_tournament(
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> dict[str, object]:
+    """Reset every match and every scrap of heat state (admin only).
+
+    Wipes the matches container AND resets phase / knockout_seeds / frozen
+    so the drunk-replay path is a single click.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    deleted = reset_matches()
+    reset_tournament()
+    return {"deleted": deleted, "status": "ok"}
+
+
 @router.delete("/admin/players", status_code=200)
 def admin_wipe_players(
     x_admin_token: str = Header(..., alias="X-Admin-Token"),
@@ -382,7 +437,10 @@ def start_next_heat(
     if x_admin_token != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid admin token")
     last_heat = bool((payload or {}).get("last_heat", False))
-    return advance_heat(last_heat=last_heat)
+    try:
+        return advance_heat(last_heat=last_heat)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/heat/set", response_model=HeatInfo, status_code=200)
@@ -455,3 +513,36 @@ def set_tables_route(
             ),
         )
     return set_tables(count)
+
+
+@router.post("/heat/max-cups", response_model=HeatInfo, status_code=200)
+def set_max_cups_route(
+    payload: dict[str, int],
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> HeatInfo:
+    """Set the per-team max cups (upper bound on a single match score)."""
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    count = payload.get("count")
+    if count is None or count < 1:
+        raise HTTPException(status_code=400, detail="Max cups must be at least 1")
+    return set_max_cups(count)
+
+
+@router.post("/heat/frozen", response_model=HeatInfo, status_code=200)
+def set_frozen_route(
+    payload: dict[str, bool],
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+) -> HeatInfo:
+    """Freeze or unfreeze the tournament (admin only).
+
+    While frozen, POST /matches is rejected with HTTP 400.
+    """
+    settings = get_settings()
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    frozen = payload.get("frozen")
+    if frozen is None:
+        raise HTTPException(status_code=400, detail="Missing 'frozen' boolean in payload")
+    return set_frozen(frozen)

@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 from beerpong_api.dal.leaderboard import compute_leaderboard
 from beerpong_api.dal.matches import list_matches
-from beerpong_api.dal.teams import get_team_names
+from beerpong_api.dal.teams import get_active_team_names
 from beerpong_api.db.client import get_state_container
 from beerpong_api.db.models import HeatInfo, HeatMatchup, HeatState, LeaderboardEntry
 
@@ -122,7 +122,7 @@ def generate_matchups(last_heat: bool = False) -> tuple[list[HeatMatchup], list[
     list of team names that should not play this heat (sorted alphabetically).
     """
     leaderboard = compute_leaderboard()
-    all_team_names = sorted(get_team_names())
+    all_team_names = sorted(get_active_team_names())
     n = len(all_team_names)
 
     if n < 2:
@@ -138,8 +138,16 @@ def generate_matchups(last_heat: bool = False) -> tuple[list[HeatMatchup], list[
 
     tables = _get_heat_state().tables
     constrained = tables * 2 < n
+    # An odd team count means one team must sit out every heat. Round-robin's
+    # BYE padding silently drops a team without reporting it, so route odd
+    # counts through the balance path which tracks the sitter explicitly.
+    odd = n % 2 == 1
 
-    if constrained or last_heat:
+    if last_heat:
+        return _generate_balance_matchups(
+            all_team_names, leaderboard, score_map, tables, wrap_up=True
+        )
+    if constrained or odd:
         return _generate_balance_matchups(all_team_names, leaderboard, score_map, tables)
 
     return (_generate_round_robin_matchups(all_team_names, leaderboard, score_map), [])
@@ -197,12 +205,19 @@ def _generate_balance_matchups(
     leaderboard: list[LeaderboardEntry],
     score_map: dict[str, int],
     tables: int,
+    wrap_up: bool = False,
 ) -> tuple[list[HeatMatchup], list[str]]:
-    """Pick a subset of teams by lowest (total_matches, total_score) and pair them.
+    """Pick a subset of teams and pair them.
 
-    The selected subset (those that play) is fed to the circle method in
-    standings-sorted order so the pairings still mix high- and low-ranked
-    teams visually. Anyone left over sits out.
+    Two modes:
+
+    * Normal balance (``wrap_up=False``): teams sorted by
+      ``(total_matches, total_score)`` ascending; first ``playing_count``
+      teams play, the rest sit.
+    * Wrap-up (``wrap_up=True``): only teams at the GLOBAL minimum match
+      count play this heat; every team above the minimum sits. Caller
+      is responsible for checking feasibility (``teams_at_min`` even and
+      ``<= 2 * tables``) — see ``_compute_match_equality``.
     """
     n = len(all_team_names)
     games_this_heat = min(tables, n // 2)
@@ -215,15 +230,28 @@ def _generate_balance_matchups(
     for name in all_team_names:
         stats.setdefault(name, (0, 0))
 
-    # Ascending: fewest matches first, lowest score as tiebreaker.
-    # Alphabetical name as the final stable tiebreaker for deterministic output.
-    sorted_by_priority = sorted(
-        all_team_names,
-        key=lambda t: (stats[t][0], stats[t][1], t),
-    )
+    if wrap_up:
+        min_matches = min(stats[t][0] for t in all_team_names)
+        at_min = [t for t in all_team_names if stats[t][0] == min_matches]
+        # Stable priority order within the at-min subset (low score first,
+        # then alphabetical) so pairings stay deterministic.
+        at_min.sort(key=lambda t: (stats[t][1], t))
+        cap = min(len(at_min), 2 * tables)
+        # Ensure even count — trim odd trailing entry. Frontend gating keeps
+        # this from happening in practice, but belt + braces.
+        cap -= cap % 2
+        playing = at_min[:cap]
+        sitting = sorted(t for t in all_team_names if t not in set(playing))
+    else:
+        # Ascending: fewest matches first, lowest score as tiebreaker.
+        # Alphabetical name as the final stable tiebreaker for deterministic output.
+        sorted_by_priority = sorted(
+            all_team_names,
+            key=lambda t: (stats[t][0], stats[t][1], t),
+        )
 
-    playing = sorted_by_priority[:playing_count]
-    sitting = sorted(sorted_by_priority[playing_count:])
+        playing = sorted_by_priority[:playing_count]
+        sitting = sorted(sorted_by_priority[playing_count:])
 
     # Use the standings-sorted order (priority order) within the selected
     # subset as input to the circle method – preserves the "mix" intent.
@@ -231,9 +259,7 @@ def _generate_balance_matchups(
     return (matchups, sitting)
 
 
-def _circle_method_pairings(
-    teams: list[str], score_map: dict[str, int]
-) -> list[HeatMatchup]:
+def _circle_method_pairings(teams: list[str], score_map: dict[str, int]) -> list[HeatMatchup]:
     """Run a single circle-method round on the given (already-ordered) teams.
 
     Pads with a BYE for odd counts so callers don't need to special-case.
@@ -327,9 +353,14 @@ def get_heat_info() -> HeatInfo:
     handled_teams: set[str] = set()
 
     # --- Use stored matchups or generate new ones ---
+    # In knockout phases matchups are only ever produced by start_knockout
+    # and advance_heat; never regenerate them from the regular scheduler.
     if state.stored_matchups:
         base_matchups = state.stored_matchups
         stored_sitting_out = list(state.sitting_out)
+    elif state.phase in {"semifinals", "finals", "complete"}:
+        base_matchups = []
+        stored_sitting_out = []
     else:
         base_matchups, stored_sitting_out = generate_matchups()
         state.stored_matchups = base_matchups
@@ -422,6 +453,12 @@ def get_heat_info() -> HeatInfo:
     # for this heat should drop off the display — recorded matches win.
     teams_sitting_out = sorted(t for t in stored_sitting_out if t not in teams_in_recorded)
 
+    # Wrap-up / knockout feasibility gates. Computed from the live leaderboard
+    # so the UI can grey out the buttons without a second fetch.
+    wrap_up_allowed, knockout_allowed = _compute_phase_gates(
+        get_active_team_names(), leaderboard, state.tables, state.phase
+    )
+
     return HeatInfo(
         current_heat=current,
         matchups=enriched,
@@ -431,7 +468,47 @@ def get_heat_info() -> HeatInfo:
         timer_duration=state.timer_duration,
         timer_started_at=state.heat_timer_started_at,
         tables=state.tables,
+        max_cups=state.max_cups,
+        phase=state.phase,
+        knockout_seeds=list(state.knockout_seeds),
+        frozen=state.frozen,
+        wrap_up_allowed=wrap_up_allowed,
+        knockout_allowed=knockout_allowed,
     )
+
+
+def _compute_phase_gates(
+    active_teams: list[str],
+    leaderboard: list[LeaderboardEntry],
+    tables: int,
+    phase: str,
+) -> tuple[bool, bool]:
+    """Compute ``(wrap_up_allowed, knockout_allowed)`` from the leaderboard.
+
+    * ``wrap_up_allowed`` — the count of teams at the minimum match total is
+      even and fits within ``2 * tables`` (so the single wrap-up heat can
+      fully equalise everyone's match counts). Always False outside the
+      regular phase.
+    * ``knockout_allowed`` — every eligible team has played exactly the same
+      number of matches AND there are at least 4 teams. Always False outside
+      the regular phase.
+    """
+    if phase != "regular" or len(active_teams) < 2:
+        return (False, False)
+
+    match_counts = {e.team_name: e.total_matches for e in leaderboard}
+    counts = [match_counts.get(name, 0) for name in active_teams]
+    min_count = min(counts)
+    teams_at_min = sum(1 for c in counts if c == min_count)
+    all_equal = min(counts) == max(counts)
+
+    wrap_up_allowed = (
+        not all_equal
+        and teams_at_min % 2 == 0
+        and teams_at_min <= 2 * tables
+    )
+    knockout_allowed = all_equal and len(active_teams) >= 4
+    return (wrap_up_allowed, knockout_allowed)
 
 
 def advance_heat(last_heat: bool = False) -> HeatInfo:
@@ -440,8 +517,21 @@ def advance_heat(last_heat: bool = False) -> HeatInfo:
     Passing ``last_heat=True`` forces the games-balance scheduler path so
     teams with the fewest matches get priority even when tables would
     otherwise permit a full round-robin slate.
+
+    In knockout phases this instead drives bracket progression:
+
+    * ``phase == "semifinals"`` — both SF matches must be recorded and
+      have a decisive winner; the two winners become the Finals matchup.
+    * ``phase == "finals"`` or ``"complete"`` — rejected with
+      ``ValueError`` (bracket already at the last stage).
     """
     state = _get_heat_state()
+
+    if state.phase == "semifinals":
+        return _advance_to_finals(state)
+    if state.phase in {"finals", "complete"}:
+        raise ValueError("Tournament bracket is already at the final stage")
+
     state.current_heat += 1
     matchups, sitting = generate_matchups(last_heat=last_heat)
     state.stored_matchups = matchups
@@ -451,9 +541,178 @@ def advance_heat(last_heat: bool = False) -> HeatInfo:
     return get_heat_info()
 
 
-def set_heat(heat_number: int) -> HeatInfo:
-    """Set the heat counter to an explicit value and return the new heat info."""
+def _advance_to_finals(state: HeatState) -> HeatInfo:
+    """Compute the Finals matchup from the recorded Semi-final scores."""
+    sf_heat = state.current_heat
+    sf_matches = _get_heat_matches(sf_heat)
+
+    # The two SF pairings were persisted at start_knockout. Require both
+    # recorded with a decisive winner before allowing advancement.
+    if len(state.stored_matchups) != 2:
+        raise ValueError("Semi-final matchups are missing — cannot advance to Finals")
+
+    winners: list[str] = []
+    for mu in state.stored_matchups:
+        key: tuple[str, str] = tuple(sorted([mu.team1_name, mu.team2_name]))  # pyright: ignore[reportAssignmentType]
+        if key not in sf_matches:
+            raise ValueError("Both Semi-final matches must be recorded before advancing to Finals")
+        s1, s2 = sf_matches[key]
+        if s1 == s2:
+            raise ValueError(
+                "Knockout matches cannot end in a tie — play sudden death until someone scores."
+            )
+        t1, t2 = key  # already alphabetically sorted
+        winners.append(t1 if s1 > s2 else t2)
+
+    state.current_heat += 1
+    state.phase = "finals"
+    state.stored_matchups = [
+        HeatMatchup(
+            team1_name=winners[0],
+            team2_name=winners[1],
+            team1_points=0,
+            team2_points=0,
+        )
+    ]
+    state.sitting_out = []
+    state.heat_timer_started_at = None
+    _save_heat_state(state)
+    return get_heat_info()
+
+
+def start_knockout() -> HeatInfo:
+    """Begin the top-4 single-elimination bracket.
+
+    Seeds the top-4 teams by ``(total_score desc, wins desc, name asc)``
+    and produces the two Semi-final matchups: seed 1 vs seed 4, seed 2
+    vs seed 3. Bumps the heat counter so the bracket heats key
+    distinctly for the duplicate-match check.
+
+    Raises ``ValueError`` when:
+
+    * the tournament is not in the ``regular`` phase;
+    * fewer than four teams are eligible (a team is eligible only if it
+      has at least one member);
+    * eligible teams have not all played the same number of matches
+      (seeding would be unfair otherwise).
+    """
     state = _get_heat_state()
+    if state.phase != "regular":
+        raise ValueError("Knockout has already started")
+
+    # Eligible teams: registered AND with at least one member.
+    from beerpong_api.dal.teams import list_teams
+
+    eligible = {t.name for t in list_teams() if t.member_ids}
+    if len(eligible) < 4:
+        raise ValueError("Knockout requires at least 4 teams with members")
+
+    leaderboard = compute_leaderboard()
+
+    # Fairness gate: every eligible team must have played exactly the same
+    # number of regular-phase matches before we enter the bracket. Teams
+    # with no entry on the leaderboard default to 0 matches (never played).
+    match_counts = {e.team_name: e.total_matches for e in leaderboard}
+    counts = [match_counts.get(name, 0) for name in eligible]
+    if min(counts) != max(counts):
+        raise ValueError(
+            "Knockout requires every team to have played the same number of matches"
+        )
+    lb_by_name: dict[str, LeaderboardEntry] = {e.team_name: e for e in leaderboard}
+
+    # Everybody eligible — leaderboard entries are only present for teams
+    # that have actually played; fall back to zeroes for the rest so the
+    # seeding is deterministic even when a team hasn't played yet.
+    def _seed_key(name: str) -> tuple[int, int, str]:
+        entry = lb_by_name.get(name)
+        total_score = entry.total_score if entry else 0
+        total_wins = entry.total_wins if entry else 0
+        # Sort: score desc, wins desc, name asc — invert via negation so
+        # a single ascending sort works cleanly.
+        return (-total_score, -total_wins, name)
+
+    seeded = sorted(eligible, key=_seed_key)
+    top4 = seeded[:4]
+
+    state.knockout_seeds = list(top4)
+    state.phase = "semifinals"
+    state.current_heat += 1
+    state.stored_matchups = [
+        HeatMatchup(
+            team1_name=top4[0],
+            team2_name=top4[3],
+            team1_points=0,
+            team2_points=0,
+        ),
+        HeatMatchup(
+            team1_name=top4[1],
+            team2_name=top4[2],
+            team1_points=0,
+            team2_points=0,
+        ),
+    ]
+    state.sitting_out = []
+    state.heat_timer_started_at = None
+    _save_heat_state(state)
+    return get_heat_info()
+
+
+def set_max_cups(count: int) -> HeatInfo:
+    """Update the per-team max cups (upper bound on a single match score)."""
+    state = _get_heat_state()
+    state.max_cups = count
+    _save_heat_state(state)
+    return get_heat_info()
+
+
+def set_frozen(frozen: bool) -> HeatInfo:
+    """Freeze or unfreeze the tournament — admin-gated at the route level."""
+    state = _get_heat_state()
+    state.frozen = frozen
+    _save_heat_state(state)
+    return get_heat_info()
+
+
+def is_frozen() -> bool:
+    """Return the current freeze state."""
+    return _get_heat_state().frozen
+
+
+def reset_tournament() -> HeatInfo:
+    """Reset heat state to a fresh regular-phase tournament.
+
+    Zeroes the heat counter, clears stored matchups and sitting-out,
+    resets phase/knockout_seeds/frozen. The matches container is wiped
+    separately at the route level so the drunk-replay path is a single
+    admin action.
+    """
+    state = _get_heat_state()
+    state.current_heat = 1
+    state.stored_matchups = []
+    state.sitting_out = []
+    state.heat_timer_started_at = None
+    state.phase = "regular"
+    state.knockout_seeds = []
+    state.frozen = False
+    _save_heat_state(state)
+    return get_heat_info()
+
+
+def set_heat(heat_number: int) -> HeatInfo:
+    """Set the heat counter to an explicit value and return the new heat info.
+
+    If the tournament is currently in a knockout phase (semifinals / finals /
+    complete), rewinding the heat is treated as an admin rollback: the phase
+    is reset to ``regular``, the bracket seeds are cleared, the freeze is
+    released, and every persisted knockout match is deleted so the
+    leaderboard + history match the restored regular-phase state.
+    """
+    state = _get_heat_state()
+    if state.phase != "regular":
+        _purge_knockout_matches()
+        state.phase = "regular"
+        state.knockout_seeds = []
+        state.frozen = False
     state.current_heat = heat_number
     matchups, sitting = generate_matchups()
     state.stored_matchups = matchups
@@ -461,6 +720,19 @@ def set_heat(heat_number: int) -> HeatInfo:
     state.heat_timer_started_at = None
     _save_heat_state(state)
     return get_heat_info()
+
+
+def _purge_knockout_matches() -> None:
+    """Delete every persisted match whose ``phase`` is not ``regular``.
+
+    Used when an admin rewinds out of a bracket phase; leaves regular-phase
+    scores untouched so the leaderboard remains correct.
+    """
+    from beerpong_api.dal.matches import delete_match, list_matches
+
+    for m in list_matches():
+        if m.phase != "regular":
+            delete_match(m.id)
 
 
 def start_heat_timer() -> HeatInfo:

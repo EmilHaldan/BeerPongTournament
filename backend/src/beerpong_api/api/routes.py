@@ -16,7 +16,13 @@ from beerpong_api.dal.heat import (
     start_heat_timer,
 )
 from beerpong_api.dal.leaderboard import compute_leaderboard
-from beerpong_api.dal.matches import delete_match, insert_match, list_matches, reset_matches
+from beerpong_api.dal.matches import (
+    DuplicateMatchError,
+    delete_match,
+    insert_match,
+    list_matches,
+    reset_matches,
+)
 from beerpong_api.dal.players import (
     assign_player_to_team,
     create_player,
@@ -110,7 +116,10 @@ def create_match(payload: MatchCreate) -> MatchResult:
     payload_dict["heat"] = current_heat
     locked_payload = MatchCreate(**payload_dict)
 
-    return insert_match(locked_payload)
+    try:
+        return insert_match(locked_payload)
+    except DuplicateMatchError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/leaderboard", response_model=list[LeaderboardEntry])

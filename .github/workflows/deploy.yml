@@ -128,10 +128,40 @@ jobs:
           skip_app_build: true
           skip_api_build: true
 
+  # ── 4. Seed dummy roster ───────────────────────────────────────────
+  seed-roster:
+    name: Seed dummy roster
+    needs: [terraform-apply, deploy-backend, deploy-frontend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for backend /health
+        run: |
+          curl --fail --silent --show-error \
+            --retry 12 --retry-all-errors --retry-delay 10 --max-time 15 \
+            "${{ needs.terraform-apply.outputs.backend_url }}/health"
+
+      - name: Upload dummy roster CSV
+        run: |
+          set -euo pipefail
+          http_code=$(curl --silent --show-error --write-out "%{http_code}" --output /tmp/upload-response.json \
+            -X POST \
+            -H "X-Admin-Token: ${{ secrets.ADMIN_TOKEN }}" \
+            -F "file=@data/team.csv;type=text/csv" \
+            "${{ needs.terraform-apply.outputs.backend_url }}/admin/teams/upload-csv")
+          echo "HTTP $http_code"
+          cat /tmp/upload-response.json
+          if [[ "$http_code" != "200" ]]; then
+            echo "Seed failed: HTTP $http_code"
+            exit 1
+          fi
+
   # ── Summary ─────────────────────────────────────────────────────────
   summary:
     name: Print URLs
-    needs: [terraform-apply, deploy-frontend]
+    needs: [terraform-apply, deploy-frontend, seed-roster]
     runs-on: ubuntu-latest
     steps:
       - name: Show deployment URLs

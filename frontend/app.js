@@ -592,7 +592,7 @@ function renderRegisteredPlayers(players, teams) {
   const tbody = document.getElementById("players-body");
   const safePlayers = (players || []).slice();
   if (safePlayers.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="empty-msg">No players registered yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-msg">No players registered yet</td></tr>';
     return;
   }
   // Sort by name using the default locale — handles Danish Æ/Ø/Å correctly.
@@ -601,13 +601,18 @@ function renderRegisteredPlayers(players, teams) {
     .map(
       (p, i) => {
         const teamName = _teamNameByPlayerId(teams || [], p.team_id);
-        const unassigned = !p.team_id;
+        // Treat both "no team_id" and "team_id points at a missing team" as unassigned.
+        const unassigned = !p.team_id || !teamName;
         const rowCls = unassigned ? ' class="player-unassigned"' : '';
         const checked = highlightedPlayer === p.name ? "checked" : "";
+        const teamCell = unassigned
+          ? '<td class="player-team-cell muted">Unassigned</td>'
+          : `<td class="player-team-cell" data-team="${escapeHtml(teamName)}">${escapeHtml(teamName)}</td>`;
         return `
     <tr${rowCls}>
       <td>${i + 1}</td>
       <td class="player-name-cell" data-player="${escapeHtml(p.name)}">${escapeHtml(p.name)}</td>
+      ${teamCell}
       <td><input type="checkbox" class="player-check" data-player="${escapeHtml(p.name)}" data-team="${escapeHtml(teamName)}" ${checked} /></td>
     </tr>`;
       }

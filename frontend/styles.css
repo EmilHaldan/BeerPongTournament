@@ -666,6 +666,9 @@ tbody tr:hover {
 .matchup-card[data-expanded="true"] .matchup-members {
   max-height: 6rem;
   margin-top: 0.2rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--text-muted);
+  margin-bottom: 0.3rem;
   opacity: 1;
 }
 

@@ -1155,6 +1155,10 @@ tbody tr:hover {
   cursor: pointer;
 }
 
+#players-body tr {
+  cursor: pointer;
+}
+
 /* Registered Players table — visual greying for unassigned players */
 #players-body tr.player-unassigned {
   opacity: 0.55;

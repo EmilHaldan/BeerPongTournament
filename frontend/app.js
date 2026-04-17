@@ -1962,6 +1962,17 @@ document.getElementById("players-body").addEventListener("change", (e) => {
   }
 });
 
+// Allow clicking anywhere on a player row to toggle highlight (not just the checkbox).
+document.getElementById("players-body").addEventListener("click", (e) => {
+  if (e.target.classList.contains("player-check")) return;
+  const row = e.target.closest("tr");
+  if (!row) return;
+  const cb = row.querySelector(".player-check");
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  cb.dispatchEvent(new Event("change", { bubbles: true }));
+});
+
 function _restoreHighlightFromStorage() {
   let cachedTeam = null;
   let cachedPlayer = null;

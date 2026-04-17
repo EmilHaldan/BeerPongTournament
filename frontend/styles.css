@@ -648,6 +648,27 @@ tbody tr:hover {
    the grid-template-rows trick was jittery at start). Sigmoid-ish timing
    on the height change; plain opacity fade on the text so it doesn't
    "fold out" line by line — the whole block fades as a unit. */
+.matchup-card .matchup-members {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.3;
+  margin-top: 0;
+  font-style: italic;
+  transition:
+    max-height 0.45s cubic-bezier(0.45, 0.05, 0.55, 0.95),
+    margin-top 0.45s cubic-bezier(0.45, 0.05, 0.55, 0.95),
+    opacity 1s ease;
+}
+
+.matchup-card[data-expanded="true"] .matchup-members {
+  max-height: 3rem;
+  margin-top: 0.2rem;
+  opacity: 1;
+}
+
 .matchup-card .matchup-team-stats {
   max-height: 0;
   overflow: hidden;

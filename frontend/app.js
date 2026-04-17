@@ -984,10 +984,23 @@ function renderHeatInfo(heatInfo) {
           <div>Max Cups: ${s.max}</div>`;
         const matchupKey = _matchupKey(redName, blueName);
         const isExpanded = expandedMatchups.has(matchupKey) ? "true" : "false";
+        const renderMembers = (teamName) => {
+          const team = (teamsCache || []).find(t => t.name === teamName);
+          if (!team || !team.member_ids || team.member_ids.length === 0) return "";
+          const names = team.member_ids
+            .map(pid => _playerNameById(playersCache || [], pid))
+            .filter(n => n.length > 0)
+            .sort((a, b) => a.localeCompare(b));
+          if (names.length === 0) return "";
+          return names.map(n => escapeHtml(n)).join(" · ");
+        };
+        const redMembers = renderMembers(redName);
+        const blueMembers = renderMembers(blueName);
         return `
     <div class="matchup-card ${recordedClass} ${winnerClass}" data-expanded="${isExpanded}" data-matchup-key="${escapeHtml(matchupKey)}">
       <div class="matchup-team red-side">
         <div class="matchup-name-row"><span class="matchup-name">${escapeHtml(redName)}</span></div>
+        <div class="matchup-members">${redMembers}</div>
         <span class="matchup-pts">${redPts} pts</span>
         <div class="matchup-team-stats">${renderStats(redStats)}</div>
       </div>
@@ -998,6 +1011,7 @@ function renderHeatInfo(heatInfo) {
       </div>
       <div class="matchup-team blue-side">
         <div class="matchup-name-row"><span class="matchup-name">${escapeHtml(blueName)}</span></div>
+        <div class="matchup-members">${blueMembers}</div>
         <span class="matchup-pts">${bluePts} pts</span>
         <div class="matchup-team-stats">${renderStats(blueStats)}</div>
       </div>

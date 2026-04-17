@@ -992,7 +992,7 @@ function renderHeatInfo(heatInfo) {
             .filter(n => n.length > 0)
             .sort((a, b) => a.localeCompare(b));
           if (names.length === 0) return "";
-          return names.map(n => escapeHtml(n)).join(" · ");
+          return names.map(n => `<div>${escapeHtml(n)}</div>`).join("");
         };
         const redMembers = renderMembers(redName);
         const blueMembers = renderMembers(blueName);

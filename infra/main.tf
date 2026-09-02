@@ -101,7 +101,7 @@ resource "azurerm_container_registry" "acr" {
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
   sku                 = "Basic"
-  admin_enabled       = false
+  admin_enabled       = true
 
   tags = azurerm_resource_group.main.tags
 }
@@ -134,15 +134,6 @@ resource "azurerm_container_app_environment" "env" {
   }
 
   tags = azurerm_resource_group.main.tags
-}
-
-# ── Managed Identity (for ACR pull) ──────────────────────────────────
-
-resource "azurerm_user_assigned_identity" "backend" {
-  name                = "${local.prefix}-api-id-${random_string.suffix.result}"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  tags                = azurerm_resource_group.main.tags
 }
 
 # ── Container App (Backend API) ───────────────────────────────────────
@@ -211,14 +202,15 @@ resource "azurerm_container_app" "backend" {
     value = var.admin_token
   }
 
-  registry {
-    server   = azurerm_container_registry.acr.login_server
-    identity = azurerm_user_assigned_identity.backend.id
+  secret {
+    name  = "acr-password"
+    value = azurerm_container_registry.acr.admin_password
   }
 
-  identity {
-    type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.backend.id]
+  registry {
+    server               = azurerm_container_registry.acr.login_server
+    username             = azurerm_container_registry.acr.admin_username
+    password_secret_name = "acr-password"
   }
 
   tags = azurerm_resource_group.main.tags
@@ -228,14 +220,6 @@ resource "azurerm_container_app" "backend" {
       template[0].container[0].image,
     ]
   }
-}
-
-# ── ACR Pull Permission (Managed Identity) ──────────────────────────
-
-resource "azurerm_role_assignment" "acr_pull" {
-  scope                = azurerm_container_registry.acr.id
-  role_definition_name = "AcrPull"
-  principal_id         = azurerm_user_assigned_identity.backend.principal_id
 }
 
 # ── Static Web App (Frontend) ────────────────────────────────────────
